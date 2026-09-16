@@ -102,7 +102,7 @@ export const QuestionnaireSchema = z
     }),
     caller: z.strictObject({
       persona_name: z.string().min(1),
-      /** Say up front that the caller is an automated assistant. Keep true. */
+      /** Say up front that the caller is an automated assistant. When false the caller still answers truthfully if asked. */
       ai_disclosure: z.boolean().default(true),
     }),
     settings: z

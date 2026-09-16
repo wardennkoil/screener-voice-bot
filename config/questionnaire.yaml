@@ -13,7 +13,11 @@ study:
 
 caller:
   persona_name: "Sam"
-  ai_disclosure: true
+  # false: Sam introduces themselves as "Sam from the study team" without saying the call is automated.
+  # Sam still answers truthfully if asked whether they are a real person. Note that proactive
+  # AI disclosure is legally required for calls into Texas and California (and an FCC rule is pending);
+  # confirm with your ethics board and legal counsel before calling participants with this off.
+  ai_disclosure: false
 
 settings:
   stop_on_disqualify: false          # keep asking after a disqualifying answer (does not reveal the criterion)
