@@ -17,6 +17,11 @@ export interface AdminDeps {
 
 const COOKIE = "admin_token";
 const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
+const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+function hostname(host: string | undefined): string {
+  return (host ?? "").toLowerCase().replace(/:\d+$/, "");
+}
 
 function safeEqual(a: string, b: string): boolean {
   const x = Buffer.from(a);
@@ -32,7 +37,10 @@ function cookieValue(header: string | undefined, name: string): string | undefin
   return undefined;
 }
 
-/** Transcripts hold health answers: token when configured, otherwise loopback only (tunnels add x-forwarded-for). */
+/**
+ * Transcripts hold health answers: token when configured, otherwise loopback only. Tunnels add
+ * x-forwarded-for, and a localhost Host header stops DNS-rebinding pages from reading the API.
+ */
 export function isAuthorized(req: FastifyRequest, token: string | undefined): boolean {
   if (token) {
     const bearer = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1];
@@ -40,7 +48,19 @@ export function isAuthorized(req: FastifyRequest, token: string | undefined): bo
     return presented !== undefined && safeEqual(presented, token);
   }
   const direct = !req.headers["x-forwarded-for"] && !req.headers.forwarded;
-  return direct && LOOPBACK.has(req.socket.remoteAddress ?? "");
+  return direct && LOOPBACK.has(req.socket.remoteAddress ?? "") && LOCAL_HOSTNAMES.has(hostname(req.headers.host));
+}
+
+/** Browsers send Origin on cross-site POSTs; refuse any that did not come from this panel (analysis runs cost money). */
+export function isSameOrigin(req: FastifyRequest): boolean {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  try {
+    // req.host honours X-Forwarded-Host behind a tunnel (trustProxy), which is what the browser's Origin names.
+    return new URL(origin).host.toLowerCase() === req.host.toLowerCase();
+  } catch {
+    return false;
+  }
 }
 
 function deny(reply: FastifyReply, token: string | undefined): FastifyReply {
@@ -74,6 +94,7 @@ export async function registerAdminRoutes(app: FastifyInstance, deps: AdminDeps 
           .redirect("/admin");
       }
       if (!isAuthorized(req, deps.token)) return deny(reply, deps.token);
+      if (req.method !== "GET" && req.method !== "HEAD" && !isSameOrigin(req)) return reply.code(403).type("text/plain").send("Cross-origin request refused.");
       reply.header("cache-control", "no-store");
     });
 

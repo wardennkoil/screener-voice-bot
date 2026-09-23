@@ -1,7 +1,7 @@
 import type { LlmAdapter } from "../conversation/llm.js";
 import type { Logger } from "../logger.js";
 import type { Questionnaire } from "../screening/schema.js";
-import type { Transcript } from "../storage/transcripts.js";
+import { transcriptFileId, type Transcript } from "../storage/transcripts.js";
 import { analyzeCall, transcriptHash, type StoredAnalysis } from "./analyze.js";
 import { isValidSid, type AnalyticsStore } from "./store.js";
 
@@ -15,6 +15,8 @@ export interface AnalysisServiceDeps {
   model: string;
   log: Logger;
   concurrency?: number;
+  /** RECORD_CALLS as the calls were made; shapes the plan the analyst compares against. */
+  recordingEnabled?: boolean;
 }
 
 /** Fewer person turns than this and there is nothing worth a model request. */
@@ -39,7 +41,7 @@ export class AnalysisService {
 
   /** Accepts a raw call SID or a transcript file id (same sanitizing as saveTranscript). */
   enqueue(callSid: string): boolean {
-    const sid = callSid.replace(/[^A-Za-z0-9_-]/g, "_");
+    const sid = transcriptFileId(callSid);
     if (!isValidSid(sid) || this.queue.includes(sid) || this.running.has(sid)) return false;
     this.errors.delete(sid);
     this.queue.push(sid);
@@ -60,14 +62,13 @@ export class AnalysisService {
 
   /** Queues every call without a current analysis. Returns how many were queued. */
   async analyzeAllPending(): Promise<number> {
+    const candidates = (await this.deps.store.listTranscripts()).filter((t) => !isTooShort(t));
+    const stored = await Promise.all(candidates.map((t) => this.deps.store.analysis(this.sidOf(t))));
     let n = 0;
-    for (const t of await this.deps.store.listTranscripts()) {
-      const sid = this.sidOf(t);
-      if (isTooShort(t)) continue;
-      const stored = await this.deps.store.analysis(sid);
-      if (stored && stored.transcriptHash === transcriptHash(t)) continue;
-      if (this.enqueue(sid)) n++;
-    }
+    candidates.forEach((t, i) => {
+      const current = stored[i] && stored[i].transcriptHash === transcriptHash(t);
+      if (!current && this.enqueue(this.sidOf(t))) n++;
+    });
     return n;
   }
 
@@ -78,7 +79,7 @@ export class AnalysisService {
   }
 
   sidOf(t: Transcript): string {
-    return t.callSid.replace(/[^A-Za-z0-9_-]/g, "_");
+    return transcriptFileId(t.callSid);
   }
 
   private pump(): void {
@@ -101,7 +102,7 @@ export class AnalysisService {
       if (!t) throw new Error("transcript not found");
       if (isTooShort(t)) return;
       const started = Date.now();
-      const analysis = await analyzeCall(t, this.deps.questionnaire, this.deps.llm);
+      const analysis = await analyzeCall(t, this.deps.questionnaire, this.deps.llm, { recordingEnabled: this.deps.recordingEnabled });
       await this.deps.store.saveAnalysis({ callSid: sid, model: this.deps.model, createdAt: new Date().toISOString(), transcriptHash: transcriptHash(t), analysis });
       log.info({ ms: Date.now() - started, deviations: analysis.deviations.length, sentiment: analysis.sentiment.label }, "call analyzed");
     } catch (err) {

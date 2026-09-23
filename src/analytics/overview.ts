@@ -72,7 +72,7 @@ export function summarize(b: CallBundle): CallSummary {
     durationS: s.durationS,
     outcome: t.outcome ?? "unknown",
     eligible: t.eligible ?? "undetermined",
-    answered: s.answered,
+    answered: s.requiredAnswered,
     required: s.required,
     interruptions: s.interruptions,
     toolErrors: s.toolErrors.length,
@@ -132,7 +132,13 @@ export function buildOverview(bundles: CallBundle[], q: Questionnaire): Overview
       }
     }
     if (s.lastQuestionReached !== undefined) furthest = Math.max(furthest, plannedIndex.get(s.lastQuestionReached) ?? -1);
-    for (let i = 0; i <= furthest; i++) funnel[i]!.reached++;
+    const coverage = new Map(s.coverage.map((c) => [c.id, c]));
+    for (let i = 0; i <= furthest; i++) {
+      // A conditional follow-up the call passed without touching simply did not apply; it is not a drop-off.
+      const id = planned[i]!.id;
+      if (planned[i]!.parentId && coverage.get(id)?.status === "not_reached" && s.lastQuestionReached !== id) continue;
+      funnel[i]!.reached++;
+    }
 
     const reasons: string[] = [];
     if (s.toolErrors.length) reasons.push(`${s.toolErrors.length} tool error${s.toolErrors.length > 1 ? "s" : ""}`);
@@ -174,11 +180,11 @@ export function buildOverview(bundles: CallBundle[], q: Questionnaire): Overview
     eligible,
     avgDurationS: Math.round(mean(bundles.map((b) => b.stats.durationS)) ?? 0),
     medianLatencyMs: sortedLat.length ? sortedLat[Math.floor(sortedLat.length / 2)] : undefined,
-    avgAnswered: mean(bundles.map((b) => b.stats.answered)) ?? 0,
+    avgAnswered: mean(bundles.map((b) => b.stats.requiredAnswered)) ?? 0,
     required: bundles[0]?.stats.required ?? planned.filter((x) => x.required && !x.parentId).length,
     avgSentiment: mean(sentiments),
     sentimentLabels,
-    avgAdherence: mean(adherence) !== undefined ? Math.round(mean(adherence)!) : undefined,
+    avgAdherence: adherence.length ? Math.round(mean(adherence)!) : undefined,
     funnel,
     deviationKinds: [...kinds.entries()].map(([kind, v]) => ({ kind, ...v })).sort((a, b) => b.count - a.count),
     dataConcerns: [...concerns.entries()]

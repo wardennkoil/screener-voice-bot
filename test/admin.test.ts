@@ -55,6 +55,17 @@ describe("admin panel", () => {
     expect((await app.inject({ url: "/admin" })).statusCode).toBe(200);
     expect((await app.inject({ url: "/admin/api/calls", headers: { "x-forwarded-for": "1.2.3.4" } })).statusCode).toBe(401);
     expect((await app.inject({ url: "/admin/api/calls", remoteAddress: "10.0.0.5" })).statusCode).toBe(401);
+    // DNS rebinding: a page on another name resolved to 127.0.0.1 still carries its own Host.
+    expect((await app.inject({ url: "/admin/api/calls", headers: { host: "attacker.example:3000" } })).statusCode).toBe(401);
+    expect((await app.inject({ url: "/admin/api/calls", headers: { host: "127.0.0.1:3000" } })).statusCode).toBe(200);
+  });
+
+  it("refuses cross-site POSTs that would start paid analysis runs", async () => {
+    const { app } = await make();
+    const evil = await app.inject({ method: "POST", url: "/admin/api/analyze-pending", headers: { host: "localhost:3000", origin: "https://attacker.example" } });
+    expect(evil.statusCode).toBe(403);
+    const same = await app.inject({ method: "POST", url: "/admin/api/analyze-pending", headers: { host: "localhost:3000", origin: "http://localhost:3000" } });
+    expect(same.statusCode).toBe(202);
   });
 
   it("with a token, accepts bearer or the cookie set by the login link", async () => {

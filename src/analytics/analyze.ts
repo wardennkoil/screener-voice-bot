@@ -18,6 +18,7 @@ export const DEVIATION_KINDS = [
   "bot_reordered_or_skipped",
   "bot_error",
   "technical_issue",
+  "other",
 ] as const;
 
 const score = (min: number, max: number) => z.coerce.number().transform((v) => Math.min(max, Math.max(min, v)));
@@ -41,7 +42,7 @@ export const CallAnalysisSchema = z.object({
     .array(
       z.object({
         turn: z.coerce.number().int().catch(-1),
-        kind: oneOf(DEVIATION_KINDS, "off_topic"),
+        kind: oneOf(DEVIATION_KINDS, "other"),
         severity: oneOf(["low", "medium", "high"], "low"),
         description: z.string().catch(""),
         handling: oneOf(["well", "adequate", "poor"], "adequate"),
@@ -125,7 +126,7 @@ export const SUBMIT_ANALYSIS_TOOL: FunctionToolDecl = {
               type: "string",
               enum: [...DEVIATION_KINDS],
               description:
-                "person_question: the person asked something; off_topic: tangent; confusion: misunderstood the question; hesitation_or_objection: reluctance, privacy worry, pushback; answer_changed: contradicted or revised an earlier answer; bot_off_script: the bot said something the plan does not allow (medical advice, hinting eligibility, inventing facts); bot_reordered_or_skipped: asked out of order, skipped or merged questions; bot_error: wrong recording, repeated itself, ignored what was said; technical_issue: tool errors, cut-offs, long silences caused by the system.",
+                "person_question: the person asked something; off_topic: tangent; confusion: misunderstood the question; hesitation_or_objection: reluctance, privacy worry, pushback; answer_changed: contradicted or revised an earlier answer; bot_off_script: the bot said something the plan does not allow (medical advice, hinting eligibility, inventing facts); bot_reordered_or_skipped: asked out of order, skipped or merged questions; bot_error: wrong recording, repeated itself, ignored what was said; technical_issue: tool errors, cut-offs, long silences caused by the system; other: anything else that departs from the plan.",
             },
             severity: { type: "string", enum: ["low", "medium", "high"] },
             description: { type: "string", description: "What happened, one or two sentences, quoting briefly." },
@@ -228,8 +229,14 @@ function statsDigest(s: CallStats): string {
   ].join("\n");
 }
 
-export function buildAnalysisPrompt(t: Transcript, q: Questionnaire): string {
-  const plan = buildSystemPrompt(q, { firstName: "the person", recordingEnabled: false });
+export interface AnalyzeOptions {
+  /** Whether calls were made with RECORD_CALLS on; the bot's plan then includes the recording notice. */
+  recordingEnabled?: boolean;
+  signal?: AbortSignal;
+}
+
+export function buildAnalysisPrompt(t: Transcript, q: Questionnaire, opts: AnalyzeOptions = {}): string {
+  const plan = buildSystemPrompt(q, { firstName: "the person", recordingEnabled: opts.recordingEnabled ?? false });
   return `# The plan (the exact instructions the bot was given)
 <plan>
 ${plan}
@@ -257,13 +264,18 @@ function extractJson(text: string): unknown {
 }
 
 /** Runs the analyst model over one transcript. Throws when the model returns nothing usable. */
-export async function analyzeCall(t: Transcript, q: Questionnaire, llm: LlmAdapter, signal: AbortSignal = new AbortController().signal): Promise<CallAnalysis> {
+export async function analyzeCall(t: Transcript, q: Questionnaire, llm: LlmAdapter, opts: AnalyzeOptions = {}): Promise<CallAnalysis> {
   const result = await llm.run(
-    { system: ANALYST_SYSTEM, history: [userStep(buildAnalysisPrompt(t, q))], tools: [SUBMIT_ANALYSIS_TOOL], signal },
+    { system: ANALYST_SYSTEM, history: [userStep(buildAnalysisPrompt(t, q, opts))], tools: [SUBMIT_ANALYSIS_TOOL], signal: opts.signal ?? new AbortController().signal },
     { onText: () => {} },
   );
   const raw = result.toolCalls.find((c) => c.name === SUBMIT_ANALYSIS_TOOL.name)?.args ?? extractJson(result.text);
   if (!raw || typeof raw !== "object") throw new Error(`The analysis model returned no analysis${result.text ? `: ${result.text.slice(0, 200)}` : ""}`);
+  // Every field has a lenient fallback, so an empty or cut-off tool call would otherwise parse as a blank "analysis".
+  const { summary, sentiment } = raw as { summary?: unknown; sentiment?: unknown };
+  if (typeof summary !== "string" || !summary.trim() || !sentiment || typeof sentiment !== "object") {
+    throw new Error("The analysis model returned an incomplete analysis (output cut off or malformed); re-analyze to retry");
+  }
   const parsed = CallAnalysisSchema.parse(raw);
   const personTurns = new Set(t.turns.flatMap((turn, i) => (turn.role === "person" ? [i] : [])));
   parsed.turn_sentiment = parsed.turn_sentiment.filter((s) => personTurns.has(s.turn)).sort((a, b) => a.turn - b.turn);

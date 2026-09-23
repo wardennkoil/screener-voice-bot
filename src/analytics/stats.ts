@@ -18,8 +18,10 @@ export interface QuestionCoverage {
   id: string;
   /** Position in the questionnaire's planned order (1-based). */
   plannedPosition: number;
-  /** Position in which the answer was actually recorded (1-based), if it was. */
+  /** Position in which the question was first recorded (1-based); later corrections keep it. */
   actualPosition?: number;
+  /** Recorded after a question that was planned to come later. */
+  outOfOrder: boolean;
   status: "answered" | "skipped" | "not_reached";
   value?: unknown;
   verbatim?: string;
@@ -51,7 +53,10 @@ export interface CallStats {
   flags: string[];
   latency: LatencyStats;
   coverage: QuestionCoverage[];
+  /** Answers recorded, including optional questions and follow-ups. */
   answered: number;
+  /** Required top-level questions answered; pairs with `required`. */
+  requiredAnswered: number;
   required: number;
   /** Answers recorded in a different order than planned. */
   outOfOrder: number;
@@ -107,7 +112,7 @@ export function computeStats(t: Transcript, q: Questionnaire): CallStats {
 
   const flat = flattenQuestions(q);
   const coverage = new Map<string, QuestionCoverage>(
-    flat.map((x, i) => [x.id, { id: x.id, plannedPosition: i + 1, status: "not_reached", followUp: Boolean(x.parentId), sensitive: x.sensitive }]),
+    flat.map((x, i) => [x.id, { id: x.id, plannedPosition: i + 1, status: "not_reached", outOfOrder: false, followUp: Boolean(x.parentId), sensitive: x.sensitive }]),
   );
   const toolErrors: CallStats["toolErrors"] = [];
   const flags: string[] = [];
@@ -134,11 +139,13 @@ export function computeStats(t: Transcript, q: Questionnaire): CallStats {
       case "skip_question": {
         const c = coverage.get(String(args.question_id ?? ""));
         if (!c) break;
-        c.actualPosition = ++order;
+        // A correction or an answer after a skip replaces the value but keeps the original position.
+        c.actualPosition ??= ++order;
         if (call.name === "record_answer") {
           c.status = "answered";
           c.value = args.value;
-          if (typeof args.verbatim === "string") c.verbatim = args.verbatim;
+          c.verbatim = typeof args.verbatim === "string" ? args.verbatim : undefined;
+          c.skipReason = undefined;
         } else {
           c.status = "skipped";
           c.skipReason = String(args.reason ?? "");
@@ -152,8 +159,24 @@ export function computeStats(t: Transcript, q: Questionnaire): CallStats {
   }
   const list = [...coverage.values()];
   const done = list.filter((c) => c.actualPosition !== undefined).sort((a, b) => a.actualPosition! - b.actualPosition!);
-  let outOfOrder = 0;
-  for (let i = 1; i < done.length; i++) if (done[i]!.plannedPosition < done[i - 1]!.plannedPosition) outOfOrder++;
+  // The longest run recorded in planned order followed the plan; whatever falls outside it was asked out of order.
+  // Ties keep the later-planned question, so the one that jumped ahead is the one flagged.
+  const runLength = done.map(() => 1);
+  const prev = done.map(() => -1);
+  let best = -1;
+  for (let i = 0; i < done.length; i++) {
+    for (let j = 0; j < i; j++) {
+      if (done[j]!.plannedPosition < done[i]!.plannedPosition && runLength[j]! + 1 >= runLength[i]!) {
+        runLength[i] = runLength[j]! + 1;
+        prev[i] = j;
+      }
+    }
+    if (best < 0 || runLength[i]! >= runLength[best]!) best = i;
+  }
+  const inOrder = new Set<number>();
+  for (let i = best; i >= 0; i = prev[i]!) inOrder.add(i);
+  done.forEach((c, i) => (c.outOfOrder = !inOrder.has(i)));
+  const outOfOrder = done.length - inOrder.size;
   const requiredIds = new Set(flat.filter((x) => x.required && !x.parentId).map((x) => x.id));
 
   return {
@@ -171,6 +194,7 @@ export function computeStats(t: Transcript, q: Questionnaire): CallStats {
     latency: { samples: firstTokens.length, p50Ms: percentile(firstTokens, 50), p90Ms: percentile(firstTokens, 90), maxMs: firstTokens.at(-1) },
     coverage: list,
     answered: list.filter((c) => c.status === "answered").length,
+    requiredAnswered: list.filter((c) => c.status === "answered" && requiredIds.has(c.id)).length,
     required: requiredIds.size,
     outOfOrder,
     lastQuestionReached,

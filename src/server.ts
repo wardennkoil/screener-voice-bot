@@ -32,9 +32,11 @@ async function main(): Promise<void> {
   const analysisService = new AnalysisService({
     store: analysisStore,
     questionnaire,
-    llm: createLlm(e, logger, e.ANALYSIS_MODEL, { maxOutputTokens: 6000, reasoning: "medium", timeoutMs: 180_000 }),
+    // The cap includes reasoning tokens on most providers; leave room so the tool call is never cut off.
+    llm: createLlm(e, logger, e.ANALYSIS_MODEL, { maxOutputTokens: 12_000, reasoning: "medium", timeoutMs: 180_000 }),
     model: `${analysisChoice.provider}:${analysisChoice.model}`,
     log: logger.child({ mode: "analysis" }),
+    recordingEnabled: e.RECORD_CALLS,
   });
 
   let twilio: TwilioEnv | undefined;

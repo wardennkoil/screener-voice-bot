@@ -1,3 +1,5 @@
+import { escapeHtml } from "../local/page.js";
+
 /**
  * The admin panel. Plain HTML + JS served inline (no build step), like the
  * laptop page. It reads the /admin/api endpoints: an overview across calls and,
@@ -116,6 +118,7 @@ export function adminPageHtml(opts: { studyName: string; persona: string; model:
 
   .detail-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 16px; }
   .detail-head .grow { flex: 1; }
+  .back { display: none; width: 100%; text-decoration: none; font-size: 13px; }
   .detail { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, 1fr); gap: 16px; align-items: start; }
   .col { min-width: 0; }
 
@@ -154,8 +157,8 @@ export function adminPageHtml(opts: { studyName: string; persona: string; model:
   .meter .track { height: 8px; background: var(--grid); border-radius: 4px; overflow: hidden; }
   .meter .fill { height: 100%; background: var(--s1); border-radius: 4px; }
   .meter .n { text-align: right; font-variant-numeric: tabular-nums; }
-  .dev { cursor: pointer; }
-  .dev:hover { background: var(--hover); }
+  .dev[data-jump] { cursor: pointer; }
+  .dev[data-jump]:hover { background: var(--hover); }
   .dev .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   .dev .kind { font-weight: 600; }
   .dev .sugg { color: var(--ink-2); font-size: 12px; margin-top: 2px; }
@@ -176,6 +179,7 @@ export function adminPageHtml(opts: { studyName: string; persona: string; model:
     header { flex-wrap: wrap; padding: 10px 16px; }
     nav.rail { border-right: 0; border-bottom: 1px solid var(--line); max-height: 40vh; }
     .app.showing-call nav.rail { display: none; }
+    .back { display: block; }
     main { padding: 16px; overflow: visible; }
     .bubble, .tools, .devnote { max-width: 100%; }
     .grid2 { grid-template-columns: 1fr; }
@@ -203,7 +207,7 @@ const state = { calls: [], route: { view: "overview" }, detail: null, overview: 
 
 const OUTCOME_TONE = { completed: "good", partial: "warning", callback_requested: "warning", declined: "serious", wrong_person: "neutral", voicemail: "neutral", no_response: "serious", hung_up: "serious", no_answer: "neutral", busy: "neutral", failed: "critical" };
 const ELIGIBLE = { yes: ["good", "Eligible"], no: ["critical", "Not eligible"], undetermined: ["neutral", "Undetermined"] };
-const KIND_LABEL = { person_question: "Person asked a question", off_topic: "Off-topic tangent", confusion: "Confusion", hesitation_or_objection: "Hesitation / objection", answer_changed: "Answer changed", bot_off_script: "Bot went off script", bot_reordered_or_skipped: "Reordered / skipped", bot_error: "Bot error", technical_issue: "Technical issue" };
+const KIND_LABEL = { person_question: "Person asked a question", off_topic: "Off-topic tangent", confusion: "Confusion", hesitation_or_objection: "Hesitation / objection", answer_changed: "Answer changed", bot_off_script: "Bot went off script", bot_reordered_or_skipped: "Reordered / skipped", bot_error: "Bot error", technical_issue: "Technical issue", other: "Other" };
 const SEV_TONE = { high: "critical", medium: "serious", low: "warning" };
 const SEV_VAR = { high: "var(--critical)", medium: "var(--serious)", low: "var(--warning)" };
 const HANDLING = { well: ["good", "handled well"], adequate: ["neutral", "handled adequately"], poor: ["critical", "handled poorly"] };
@@ -271,7 +275,9 @@ function schedulePoll() {
       await refreshList();
       if (state.route.view === "call" && state.detail) {
         const d = await api("/admin/api/calls/" + state.route.sid);
-        if (d.analysisStatus !== state.detail.analysisStatus || (d.analysis && !state.detail.analysis)) { state.detail = d; renderCall(); }
+        const prev = state.detail;
+        const changed = d.analysisStatus !== prev.analysisStatus || (d.analysis ? d.analysis.createdAt : null) !== (prev.analysis ? prev.analysis.createdAt : null);
+        if (d.sid === state.route.sid && prev.sid === d.sid && changed) { state.detail = d; renderCall(); }
       } else if (state.route.view === "overview") {
         state.overview = await api("/admin/api/overview"); renderOverview();
       }
@@ -366,8 +372,15 @@ function renderOverview() {
 /* ---------- call detail ---------- */
 async function loadCall(sid) {
   if (!state.detail || state.detail.sid !== sid) $("#main").innerHTML = '<div class="empty">Loading call…</div>';
-  try { state.detail = await api("/admin/api/calls/" + sid); renderCall(); }
-  catch (err) { state.detail = null; $("#main").innerHTML = '<div class="empty">Could not load this call: ' + esc(err.message) + "</div>"; }
+  const current = () => state.route.view === "call" && state.route.sid === sid;
+  try {
+    const d = await api("/admin/api/calls/" + sid);
+    if (!current()) return; // the user moved on while this was loading
+    state.detail = d; renderCall();
+  } catch (err) {
+    if (!current()) return;
+    state.detail = null; $("#main").innerHTML = '<div class="empty">Could not load this call: ' + esc(err.message) + "</div>";
+  }
 }
 
 function toolsByTurn(d) {
@@ -400,7 +413,7 @@ function toolChip(c) {
 
 function renderCall() {
   const d = state.detail;
-  if (!d || state.route.view !== "call") return;
+  if (!d || state.route.view !== "call" || d.sid !== state.route.sid) return;
   const a = d.analysis ? d.analysis.analysis : null;
   const s = d.stats;
   const el = ELIGIBLE[d.eligible] || ELIGIBLE.undetermined;
@@ -409,7 +422,7 @@ function renderCall() {
   (a ? a.deviations : []).forEach((dv, i) => { if (!devByTurn.has(dv.turn)) devByTurn.set(dv.turn, []); devByTurn.get(dv.turn).push({ ...dv, i }); });
   const tools = toolsByTurn(d);
 
-  const head = '<div class="detail-head"><div class="grow"><h2>' + esc(fmtWhen(d.startedAt)) + '</h2><div class="sub">' + esc(d.sid) + " · " + fmtDur(s.durationS) + " · " + s.answered + "/" + s.required + " required answers</div></div>" +
+  const head = '<div class="detail-head"><a class="back" href="#/">← All calls</a><div class="grow"><h2>' + esc(fmtWhen(d.startedAt)) + '</h2><div class="sub">' + esc(d.sid) + " · " + fmtDur(s.durationS) + " · " + s.requiredAnswered + "/" + s.required + " required answers</div></div>" +
     chip(OUTCOME_TONE[d.outcome] || "neutral", label(d.outcome)) + chip(el[0], el[1]) + analysisControl(d) + "</div>";
 
   const turnsHtml = d.turns.map((t) => {
@@ -469,7 +482,8 @@ function insights(d, a) {
 
     blocks.push('<div class="card"><h3>Where it went off plan (' + a.deviations.length + ")</h3>" + (a.deviations.length ? '<ul class="list">' + a.deviations.map((x) => {
       const h = HANDLING[x.handling] || HANDLING.adequate;
-      return '<li class="dev" data-jump="' + x.turn + '"><div class="row"><span class="kind">' + esc(KIND_LABEL[x.kind] || x.kind) + "</span>" + chip(SEV_TONE[x.severity], x.severity) + chip(h[0], h[1]) + '<span class="muted small">#' + x.turn + "</span></div><div>" + esc(x.description) + "</div>" + (x.suggestion ? '<div class="sugg">Fix: ' + esc(x.suggestion) + "</div>" : "") + "</li>";
+      const at = x.turn >= 0;
+      return '<li class="dev"' + (at ? ' data-jump="' + x.turn + '"' : "") + '><div class="row"><span class="kind">' + esc(KIND_LABEL[x.kind] || x.kind) + "</span>" + chip(SEV_TONE[x.severity], x.severity) + chip(h[0], h[1]) + (at ? '<span class="muted small">#' + x.turn + "</span>" : "") + "</div><div>" + esc(x.description) + "</div>" + (x.suggestion ? '<div class="sugg">Fix: ' + esc(x.suggestion) + "</div>" : "") + "</li>";
     }).join("") + "</ul>" : '<div class="muted small">The call followed the plan.</div>') + "</div>");
   }
 
@@ -479,8 +493,8 @@ function insights(d, a) {
     s.coverage.map((c) => {
       const con = concerns.get(c.id);
       const val = c.status === "answered" ? esc(JSON.stringify(c.value)) : c.status === "skipped" ? '<span class="muted">skipped' + (c.skipReason ? ": " + esc(c.skipReason) : "") + "</span>" : '<span class="muted">not reached</span>';
-      const order = c.actualPosition == null ? "–" : c.actualPosition + (c.actualPosition !== c.plannedPosition ? " ↺" : "");
-      return "<tr><td class=num>" + c.plannedPosition + "</td><td class=num" + (c.actualPosition != null && c.actualPosition !== c.plannedPosition ? ' title="Recorded in a different position than planned"' : "") + ">" + order + "</td><td>" + esc(label(c.id)) + (c.followUp ? ' <span class="muted small">follow-up</span>' : "") +
+      const order = c.actualPosition == null ? "–" : c.actualPosition + (c.outOfOrder ? " ↺" : "");
+      return "<tr><td class=num>" + c.plannedPosition + "</td><td class=num" + (c.outOfOrder ? ' title="Asked ahead of a question planned before it"' : "") + ">" + order + "</td><td>" + esc(label(c.id)) + (c.followUp ? ' <span class="muted small">follow-up</span>' : "") +
         (c.verbatim ? '<div class="small muted">“' + esc(c.verbatim) + "”</div>" : "") + "</td><td>" + val +
         (con ? '<div style="margin-top:4px">' + chip(con.confidence === "low" ? "critical" : con.confidence === "medium" ? "warning" : "good", con.confidence + " confidence") + '</div><div class="small">' + esc(con.concern) + "</div>" : "") + "</td></tr>";
     }).join("") + "</tbody></table></div></div>");
@@ -573,7 +587,11 @@ document.addEventListener("click", async (e) => {
   const btn = e.target.closest("[data-action=analyze]");
   if (btn) {
     btn.disabled = true;
-    try { await api("/admin/api/calls/" + btn.dataset.sid + "/analyze", { method: "POST" }); state.detail.analysisStatus = "queued"; renderCall(); await refreshList(); schedulePoll(); }
+    try {
+      await api("/admin/api/calls/" + btn.dataset.sid + "/analyze", { method: "POST" });
+      if (state.detail && state.detail.sid === btn.dataset.sid) { state.detail.analysisStatus = "queued"; renderCall(); }
+      await refreshList(); schedulePoll();
+    }
     catch (err) { btn.disabled = false; alert("Could not start the analysis: " + err.message); }
   }
 });
@@ -583,7 +601,7 @@ $("#analyzeAll").addEventListener("click", async (e) => {
     const { queued } = await api("/admin/api/analyze-pending", { method: "POST" });
     b.textContent = queued ? "Queued " + queued : "All analyzed";
     await refreshList();
-    if (state.route.view === "call" && state.detail) { state.detail = await api("/admin/api/calls/" + state.route.sid); renderCall(); }
+    if (state.route.view === "call" && state.detail) await loadCall(state.route.sid);
     schedulePoll();
   } catch (err) { alert("Could not queue: " + err.message); }
   setTimeout(() => { b.disabled = false; b.textContent = "Analyze all pending"; }, 2500);
@@ -597,8 +615,4 @@ $("#analyzeAll").addEventListener("click", async (e) => {
 </script>
 </body>
 </html>`;
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
