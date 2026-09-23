@@ -7,6 +7,7 @@ import { buildApp, type DialerLike } from "../src/app.js";
 import type { HistoryStep, LlmAdapter, LlmRunHandlers, LlmRunParams, LlmRunResult } from "../src/conversation/llm.js";
 import { makeSessionToken } from "../src/telephony/signature.js";
 import { sampleQuestionnaire } from "./helpers.js";
+import { FileCallStore } from "../src/storage/file-store.js";
 
 const SECRET = "test-secret-test-secret";
 const twilio = { accountSid: "ACtest", authToken: "tok", fromNumber: "+15550009999", publicHost: "example.test", sessionTokenSecret: SECRET };
@@ -54,8 +55,7 @@ describe("server", () => {
       dialer,
       voice: { elevenLabsVoice: "V-flash_v2_5", eotThreshold: 0.7, interruptSensitivity: "medium" },
       recordingEnabled: false,
-      csvPath: join(dir, "results.csv"),
-      transcriptsDir: join(dir, "calls"),
+      store: new FileCallStore(join(dir, "results.csv"), join(dir, "calls")),
       log: pino({ level: "silent" }),
       skipSignatureCheck: true,
     });

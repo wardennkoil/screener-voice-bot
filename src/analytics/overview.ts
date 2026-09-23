@@ -1,6 +1,6 @@
 import { flattenQuestions, type Questionnaire } from "../screening/schema.js";
 import type { Transcript } from "../storage/transcripts.js";
-import { transcriptHash, type StoredAnalysis } from "./analyze.js";
+import { isAnalysisCurrent, type StoredAnalysis } from "./analyze.js";
 import { computeStats, displayTurns, type CallStats } from "./stats.js";
 
 export interface CallSummary {
@@ -81,7 +81,7 @@ export function summarize(b: CallBundle): CallSummary {
   if (analysis) {
     const a = analysis.analysis;
     out.analysis = {
-      stale: analysis.transcriptHash !== transcriptHash(t),
+      stale: !isAnalysisCurrent(analysis, t),
       sentimentLabel: a.sentiment.label,
       sentimentScore: a.sentiment.score,
       deviations: a.deviations.length,

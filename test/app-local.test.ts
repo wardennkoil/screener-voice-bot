@@ -6,6 +6,10 @@ import type { FluxEvents, SttStream } from "../src/local/deepgram-flux.js";
 import type { ElevenLabsTurnEvents } from "../src/local/elevenlabs-tts.js";
 import type { TtsTurn } from "../src/local/local-session.js";
 import { sampleQuestionnaire } from "./helpers.js";
+import { FileCallStore } from "../src/storage/file-store.js";
+
+const TOKEN = "local-test-token-123";
+const auth = { authorization: `Bearer ${TOKEN}` };
 
 describe("laptop voice mode over the app", () => {
   let app: Awaited<ReturnType<typeof buildApp>>;
@@ -25,8 +29,8 @@ describe("laptop voice mode over the app", () => {
       llm,
       voice: { elevenLabsVoice: "V", eotThreshold: 0.7, interruptSensitivity: "medium" },
       recordingEnabled: false,
-      csvPath: "/dev/null",
-      transcriptsDir: "/tmp",
+      store: new FileCallStore(undefined, undefined),
+      accessToken: TOKEN,
       log: pino({ level: "silent" }),
       local: {
         deepgramApiKey: "dg",
@@ -34,8 +38,6 @@ describe("laptop voice mode over the app", () => {
         voice: { voiceId: "V", modelId: "eleven_flash_v2_5" },
         sampleRate: 24000,
         eotThreshold: 0.7,
-        csvPath: undefined as unknown as string,
-        transcriptsDir: undefined as unknown as string,
         sttFactory: async (_o, events): Promise<SttStream> => {
           flux = events;
           return { sendAudio: (b) => void mic.push(b), close: () => undefined };
@@ -51,7 +53,7 @@ describe("laptop voice mode over the app", () => {
   afterAll(async () => app.close());
 
   it("boots without Twilio and serves the test page", async () => {
-    const page = await app.inject({ method: "GET", url: "/local" });
+    const page = await app.inject({ method: "GET", url: "/local", headers: auth });
     expect(page.statusCode).toBe(200);
     expect(page.body).toContain("Start call");
     expect(page.body).toContain("Restful Nights");
@@ -59,8 +61,23 @@ describe("laptop voice mode over the app", () => {
     expect(twiml.statusCode).toBe(404);
   });
 
+  it("keeps the page and its socket behind the access token (they spend API credits)", async () => {
+    expect((await app.inject({ url: "/local" })).statusCode).toBe(401);
+    expect((await app.inject({ url: "/local", headers: { "x-forwarded-for": "1.2.3.4", host: "x.onrender.com" } })).statusCode).toBe(401);
+    await expect(app.injectWS("/local-ws")).rejects.toThrow(/401/);
+    const login = await app.inject({ url: `/local?token=${TOKEN}` });
+    expect(login.statusCode).toBe(302);
+    expect(login.headers.location).toBe("/local");
+    const setCookie = String(login.headers["set-cookie"]);
+    expect(setCookie).toContain("Path=/;");
+    const cookie = setCookie.split(";")[0]!;
+    expect((await app.inject({ url: "/local", headers: { cookie } })).statusCode).toBe(200);
+    // Health checks (Render's) stay public.
+    expect((await app.inject({ url: "/health" })).statusCode).toBe(200);
+  });
+
   it("streams mic audio to speech recognition and speech back to the browser with turn ids", async () => {
-    const ws = await app.injectWS("/local-ws");
+    const ws = await app.injectWS("/local-ws", { headers: auth });
     const json: Array<Record<string, unknown>> = [];
     const audio: Buffer[] = [];
     ws.on("message", (data, isBinary) => {

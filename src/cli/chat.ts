@@ -6,6 +6,7 @@ import { CallSession } from "../conversation/session.js";
 import type { Transport } from "../conversation/transport.js";
 import { logger } from "../logger.js";
 import { loadQuestionnaire } from "../screening/loader.js";
+import { FileCallStore } from "../storage/file-store.js";
 
 /**
  * Text harness: the exact engine, prompt, tools and timers, driven from the
@@ -51,8 +52,7 @@ async function main(): Promise<void> {
     transport,
     log,
     recordingEnabled: e.RECORD_CALLS,
-    csvPath: values.csv,
-    transcriptsDir: values.transcripts,
+    store: new FileCallStore(values.csv, values.transcripts),
     onFinished: (record) => {
       console.log("\n--- result ---");
       console.log(JSON.stringify({ outcome: record.outcome, eligible: record.eligible, answers: record.answers, notes: record.notes }, null, 2));

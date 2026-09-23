@@ -8,6 +8,7 @@ import { CallSession, estimateSpeechMs } from "../src/conversation/session.js";
 import type { Transport } from "../src/conversation/transport.js";
 import type { CallRecord } from "../src/storage/csv.js";
 import { sampleQuestionnaire } from "./helpers.js";
+import { FileCallStore } from "../src/storage/file-store.js";
 
 type Script = (params: LlmRunParams, h: LlmRunHandlers) => LlmRunResult;
 
@@ -113,7 +114,7 @@ describe("CallSession", () => {
   it("lets the goodbye play before ending and persists the row and transcript", async () => {
     const dir = await mkdtemp(join(tmpdir(), "screener-session-"));
     const csvPath = join(dir, "out.csv");
-    const t = make([sayAndCall("Thanks, take care, goodbye.", "end_call", { reason: "declined" })], { csvPath, transcriptsDir: join(dir, "calls") });
+    const t = make([sayAndCall("Thanks, take care, goodbye.", "end_call", { reason: "declined" })], { store: new FileCallStore(csvPath, join(dir, "calls")) });
     t.session.start();
     t.session.onPrompt("Not interested, thanks.", true);
     await vi.advanceTimersByTimeAsync(10);

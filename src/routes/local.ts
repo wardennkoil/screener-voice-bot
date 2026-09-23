@@ -5,6 +5,8 @@ import { LocalVoiceSession, type BrowserLink, type LocalVoiceDeps } from "../loc
 import { localPageHtml } from "../local/page.js";
 import type { Questionnaire } from "../screening/schema.js";
 import type { ElevenLabsVoiceSpec } from "../local/voice-spec.js";
+import type { CallStore } from "../storage/store.js";
+import { guardScope } from "./access.js";
 
 export interface LocalRouteDeps {
   questionnaire: Questionnaire;
@@ -16,9 +18,11 @@ export interface LocalRouteDeps {
   sampleRate: number;
   eotThreshold: number;
   eagerEotThreshold?: number;
-  csvPath: string;
-  transcriptsDir: string;
+  /** Where finished laptop calls are saved; undefined keeps nothing. */
+  store?: CallStore;
   recordingEnabled: boolean;
+  /** ADMIN_TOKEN: the page spends API credits, so it is guarded like the admin panel. */
+  accessToken?: string;
   /** Called once a finished call's transcript is on disk (queues its analysis). */
   onCallSaved?(callSid: string): void;
   /** Test seams passed through to the session. */
@@ -28,6 +32,13 @@ export interface LocalRouteDeps {
 
 /** Laptop test mode: a page at /local and a WebSocket at /local-ws carrying mic audio in and speech out. */
 export async function registerLocalRoutes(app: FastifyInstance, deps: LocalRouteDeps): Promise<void> {
+  await app.register(async (scope) => {
+    guardScope(scope, deps.accessToken, ["/local"]);
+    registerGuardedLocalRoutes(scope, deps);
+  });
+}
+
+function registerGuardedLocalRoutes(app: FastifyInstance, deps: LocalRouteDeps): void {
   app.get("/local", async (_req, reply) => {
     return reply.type("text/html").send(localPageHtml({ sampleRate: deps.sampleRate, studyName: deps.questionnaire.study.name, persona: deps.questionnaire.caller.persona_name }));
   });
@@ -74,8 +85,7 @@ export async function registerLocalRoutes(app: FastifyInstance, deps: LocalRoute
             sampleRate: deps.sampleRate,
             eotThreshold: deps.eotThreshold,
             eagerEotThreshold: deps.eagerEotThreshold,
-            csvPath: deps.csvPath,
-            transcriptsDir: deps.transcriptsDir,
+            store: deps.store,
             recordingEnabled: deps.recordingEnabled,
             firstName,
             sttFactory: deps.sttFactory,

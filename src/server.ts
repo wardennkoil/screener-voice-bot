@@ -1,6 +1,8 @@
 import { buildApp } from "./app.js";
 import { AnalysisService } from "./analytics/service.js";
-import { AnalyticsStore } from "./analytics/store.js";
+import { fileStorage } from "./storage/file-store.js";
+import { PgStorage } from "./storage/pg-store.js";
+import type { Storage } from "./storage/store.js";
 import { env, requireTwilio, type TwilioEnv } from "./config.js";
 import { createLlm, describeLlm } from "./conversation/llm-factory.js";
 import { checkElevenLabsVoice } from "./local/elevenlabs-voices.js";
@@ -26,11 +28,15 @@ async function main(): Promise<void> {
   const llm = createLlm(e, logger);
   const llmChoice = describeLlm(e);
 
+  // Files under data/ by default; Postgres on hosts whose disk does not survive a restart (Render free).
+  const storage: Storage = e.DATABASE_URL
+    ? await PgStorage.connect(e.DATABASE_URL, logger)
+    : fileStorage({ transcriptsDir: e.TRANSCRIPTS_DIR, analysisDir: e.ANALYSIS_DIR, csv: { phone: e.OUTPUT_CSV, local: e.LOCAL_OUTPUT_CSV } });
+
   // Post-call analysis: latency does not matter, so allow long, deliberate output.
   const analysisChoice = describeLlm(e, e.ANALYSIS_MODEL);
-  const analysisStore = new AnalyticsStore(e.TRANSCRIPTS_DIR, e.ANALYSIS_DIR);
   const analysisService = new AnalysisService({
-    store: analysisStore,
+    store: storage.analytics,
     questionnaire,
     // The cap includes reasoning tokens on most providers; leave room so the tool call is never cut off.
     llm: createLlm(e, logger, e.ANALYSIS_MODEL, { maxOutputTokens: 12_000, reasoning: "medium", timeoutMs: 180_000 }),
@@ -66,8 +72,7 @@ async function main(): Promise<void> {
       sampleRate: e.LOCAL_SAMPLE_RATE,
       eotThreshold: e.EOT_THRESHOLD,
       eagerEotThreshold: e.LOCAL_EAGER_EOT_THRESHOLD,
-      csvPath: e.LOCAL_OUTPUT_CSV,
-      transcriptsDir: e.TRANSCRIPTS_DIR,
+      store: storage.calls("local"),
     };
     void checkElevenLabsVoice(e.ELEVENLABS_API_KEY, voice.voiceId, logger);
   } else {
@@ -82,13 +87,13 @@ async function main(): Promise<void> {
     local,
     voice: { elevenLabsVoice: e.ELEVENLABS_VOICE, eotThreshold: e.EOT_THRESHOLD, interruptSensitivity: e.INTERRUPT_SENSITIVITY },
     recordingEnabled: e.RECORD_CALLS,
-    csvPath: e.OUTPUT_CSV,
-    transcriptsDir: e.TRANSCRIPTS_DIR,
+    store: storage.calls("phone"),
+    accessToken: e.ADMIN_TOKEN,
     log: logger,
     skipSignatureCheck: process.env.SKIP_TWILIO_SIGNATURE_CHECK === "true",
     twilioAccountType,
     allowTrialCalls: e.ALLOW_TRIAL_CALLS,
-    admin: { store: analysisStore, service: analysisService, token: e.ADMIN_TOKEN },
+    admin: { store: storage.analytics, service: analysisService },
   });
 
   let shuttingDown = false;
@@ -100,6 +105,7 @@ async function main(): Promise<void> {
     // Persist what we have before the sockets drop, so a hard stop never loses answers.
     await Promise.allSettled(active.map((c) => c.session!.finalize()));
     await app.close();
+    await storage.close().catch((err: unknown) => logger.warn({ err }, "closing storage failed"));
     process.exit(0);
   };
   process.on("SIGINT", () => void shutdown("SIGINT"));
@@ -112,11 +118,12 @@ async function main(): Promise<void> {
       llm: `${llmChoice.provider}:${llmChoice.model}`,
       phone: twilio ? `enabled via ${twilio.publicHost} (account ${twilioAccountType ?? "unknown"})` : "disabled",
       local: local ? `http://localhost:${e.PORT}/local` : "disabled",
-      admin: `http://localhost:${e.PORT}/admin${e.ADMIN_TOKEN ? " (token required)" : " (localhost only)"}`,
+      admin: `http://localhost:${e.PORT}/admin`,
+      access: e.ADMIN_TOKEN ? "/admin and /local need ADMIN_TOKEN" : "/admin and /local answer on localhost only",
       analysisModel: `${analysisChoice.provider}:${analysisChoice.model}`,
       voice: `${local?.voice.voiceId ?? e.ELEVENLABS_VOICE} ${local?.voice.modelId ?? ""}`.trim(),
       eotThreshold: e.EOT_THRESHOLD,
-      csv: e.OUTPUT_CSV,
+      storage: storage.kind === "postgres" ? "postgres (DATABASE_URL)" : `files (${e.TRANSCRIPTS_DIR}, ${e.OUTPUT_CSV}, ${e.LOCAL_OUTPUT_CSV})`,
     },
     "screener server ready",
   );

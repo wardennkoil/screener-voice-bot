@@ -8,6 +8,7 @@ import { buildApp } from "../src/app.js";
 import type { LlmAdapter } from "../src/conversation/llm.js";
 import { makeSessionToken } from "../src/telephony/signature.js";
 import { sampleQuestionnaire } from "./helpers.js";
+import { FileCallStore } from "../src/storage/file-store.js";
 
 const twilioEnv = { accountSid: "ACaccount", authToken: "auth-token", fromNumber: "+15550009999", publicHost: "example.test", sessionTokenSecret: "webhook-secret-webhook-secret" };
 const llm: LlmAdapter = { run: async () => ({ steps: [], toolCalls: [], text: "", aborted: false }) };
@@ -27,8 +28,7 @@ describe("Twilio webhook authorization (signature check on)", () => {
       dialer: { dial: async () => ({ callSid: "CA" }), leaveVoicemail: async () => {}, hangup: async () => {} },
       voice: { elevenLabsVoice: "V", eotThreshold: 0.7, interruptSensitivity: "medium" },
       recordingEnabled: false,
-      csvPath: join(dir, "r.csv"),
-      transcriptsDir: join(dir, "calls"),
+      store: new FileCallStore(join(dir, "r.csv"), join(dir, "calls")),
       log: pino({ level: "silent" }),
     });
     await app.ready();

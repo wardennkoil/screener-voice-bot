@@ -3,7 +3,7 @@ import type { PhoneAppDeps as AppDeps, CallRegistry } from "../app.js";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Questionnaire } from "../screening/schema.js";
-import { appendCallRecord, type CallOutcome, type CallRecord } from "../storage/csv.js";
+import type { CallOutcome, CallRecord } from "../storage/csv.js";
 import { authorizeTwilioWebhook, verifySessionToken, type SessionTokenPayload } from "../telephony/signature.js";
 import { escapeXml } from "./twiml.js";
 
@@ -89,14 +89,14 @@ export async function registerTwilioCallbackRoutes(app: FastifyInstance, deps: A
     if (terminal && !tracked.finalized) {
       tracked.finalized = true;
       tracked.outcome = terminal;
-      await appendCallRecord(deps.csvPath, deps.questionnaire, emptyRecord(contact, callSid, terminal, tracked.startedAt, Number(req.body.CallDuration ?? 0)));
+      await deps.store.appendResult(deps.questionnaire, emptyRecord(contact, callSid, terminal, tracked.startedAt, Number(req.body.CallDuration ?? 0)));
     } else if (status === "completed" && !tracked.finalized) {
       if (tracked.session) {
         await tracked.session.finalize();
       } else {
         tracked.finalized = true;
         tracked.outcome = "failed";
-        await appendCallRecord(deps.csvPath, deps.questionnaire, emptyRecord(contact, callSid, "failed", tracked.startedAt, Number(req.body.CallDuration ?? 0), "call completed without a relay session"));
+        await deps.store.appendResult(deps.questionnaire, emptyRecord(contact, callSid, "failed", tracked.startedAt, Number(req.body.CallDuration ?? 0), "call completed without a relay session"));
       }
     }
     return reply.code(204).send();

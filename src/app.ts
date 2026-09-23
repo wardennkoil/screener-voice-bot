@@ -14,6 +14,7 @@ import { registerTwimlRoute } from "./routes/twiml.js";
 import type { Questionnaire } from "./screening/schema.js";
 import type { SessionTokenPayload } from "./telephony/signature.js";
 import type { CallOutcome } from "./storage/csv.js";
+import type { CallStore } from "./storage/store.js";
 
 export interface VoiceSettings {
   elevenLabsVoice: string;
@@ -46,13 +47,15 @@ export interface AppDeps {
   twilio?: TwilioEnv;
   dialer?: DialerLike;
   /** Laptop voice mode; registered when present. */
-  local?: Omit<LocalRouteDeps, "questionnaire" | "llm" | "log" | "recordingEnabled" | "onCallSaved">;
+  local?: Omit<LocalRouteDeps, "questionnaire" | "llm" | "log" | "recordingEnabled" | "onCallSaved" | "accessToken">;
   /** Admin panel at /admin with post-call analysis; registered when present. */
   admin?: AdminDeps;
   voice: VoiceSettings;
   recordingEnabled: boolean;
-  csvPath: string;
-  transcriptsDir: string;
+  /** Where phone calls are saved (laptop calls use `local.store`). */
+  store: CallStore;
+  /** ADMIN_TOKEN, guarding /admin and /local; unset means localhost only. */
+  accessToken?: string;
   log: Logger;
   /** Development only: accept Twilio webhooks without a valid signature. */
   skipSignatureCheck?: boolean;
@@ -135,11 +138,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   }
 
   if (deps.local) {
-    await registerLocalRoutes(app, { ...deps.local, questionnaire: deps.questionnaire, llm: deps.llm, log: deps.log, recordingEnabled: deps.recordingEnabled, onCallSaved: deps.onCallSaved });
+    await registerLocalRoutes(app, { ...deps.local, questionnaire: deps.questionnaire, llm: deps.llm, log: deps.log, recordingEnabled: deps.recordingEnabled, onCallSaved: deps.onCallSaved, accessToken: deps.accessToken });
   }
 
   if (deps.admin) {
-    await registerAdminRoutes(app, { ...deps.admin, questionnaire: deps.questionnaire });
+    await registerAdminRoutes(app, { ...deps.admin, questionnaire: deps.questionnaire, accessToken: deps.accessToken });
   }
 
   return app;

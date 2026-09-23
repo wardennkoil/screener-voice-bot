@@ -12,7 +12,8 @@
     "chat": "tsx src/cli/chat.ts",
     "sim": "tsx src/cli/simulate.ts",
     "verify-number": "tsx src/cli/verify-number.ts",
-    "bench": "tsx src/cli/bench.ts"
+    "bench": "tsx src/cli/bench.ts",
+    "db:import": "tsx src/cli/db-import.ts"
   },
   "keywords": [],
   "author": "",
@@ -28,6 +29,7 @@
     "csv-stringify": "^6.8.3",
     "dotenv": "^17.4.2",
     "fastify": "^5.12.4",
+    "pg": "^8.23.0",
     "pino": "^10.3.1",
     "proper-lockfile": "^4.1.2",
     "twilio": "^6.1.1",
@@ -36,7 +38,9 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@types/node": "^26.5.1",
+    "@types/pg": "^8.23.1",
     "@types/proper-lockfile": "^4.1.4",
     "@types/ws": "^8.18.1",
     "pino-pretty": "^13.1.3",

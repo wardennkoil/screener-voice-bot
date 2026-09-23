@@ -187,8 +187,31 @@ Rules:
 - Pay special attention to recorded answers that do not match what the person actually said.
 - Be concise and specific. Call submit_analysis once with the result; do not reply with text.`;
 
+/** JSON with object keys sorted at every level, so a Postgres jsonb round trip (which reorders keys) hashes the same. */
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>).filter(([, v]) => v !== undefined);
+    return `{${entries
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
 export function transcriptHash(t: Transcript): string {
+  return createHash("sha256").update(canonicalJson({ turns: t.turns, toolCalls: t.toolCalls })).digest("hex").slice(0, 16);
+}
+
+/** The hash analyses saved before canonical hashing used (key order as written to the file). */
+function legacyTranscriptHash(t: Transcript): string {
   return createHash("sha256").update(JSON.stringify({ turns: t.turns, toolCalls: t.toolCalls })).digest("hex").slice(0, 16);
+}
+
+/** Whether a stored analysis was made from this exact transcript (the only staleness rule; use it everywhere). */
+export function isAnalysisCurrent(stored: Pick<StoredAnalysis, "transcriptHash">, t: Transcript): boolean {
+  return stored.transcriptHash === transcriptHash(t) || stored.transcriptHash === legacyTranscriptHash(t);
 }
 
 function short(value: unknown, max = 220): string {

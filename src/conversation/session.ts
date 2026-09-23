@@ -2,8 +2,9 @@ import type { Logger } from "../logger.js";
 import type { Questionnaire } from "../screening/schema.js";
 import { ScreeningState } from "../screening/state.js";
 import { formatAnswerForCsv } from "../screening/validate.js";
-import { appendCallRecord, type CallOutcome, type CallRecord, type EligibleFlag } from "../storage/csv.js";
-import { newTranscript, saveTranscript, type Transcript } from "../storage/transcripts.js";
+import type { CallOutcome, CallRecord, EligibleFlag } from "../storage/csv.js";
+import type { CallStore } from "../storage/store.js";
+import { newTranscript, type Transcript } from "../storage/transcripts.js";
 import { ConversationEngine } from "./engine.js";
 import type { LlmAdapter } from "./llm.js";
 import { buildSystemPrompt } from "./prompt.js";
@@ -34,9 +35,8 @@ export interface SessionDeps {
   transport: Transport;
   log: Logger;
   recordingEnabled: boolean;
-  /** Where to append the CSV row; undefined disables persistence (text harness). */
-  csvPath?: string;
-  transcriptsDir?: string;
+  /** Where the transcript and result row go; undefined disables persistence (text harness). */
+  store?: CallStore;
   timers?: Partial<SessionTimers>;
   onFinished?(record: CallRecord, transcript: Transcript): void;
 }
@@ -311,15 +311,15 @@ export class CallSession implements InboundEvents {
     this.transcript.eligible = this.eligibleFlag();
     let transcriptPath = "";
     try {
-      if (this.deps.transcriptsDir) transcriptPath = await saveTranscript(this.deps.transcriptsDir, this.transcript);
+      if (this.deps.store) transcriptPath = await this.deps.store.saveTranscript(this.transcript);
     } catch (err) {
       this.deps.log.error({ err }, "failed to save transcript");
     }
     const record = this.buildRecord(transcriptPath);
     try {
-      if (this.deps.csvPath) await appendCallRecord(this.deps.csvPath, this.deps.questionnaire, record);
+      if (this.deps.store) await this.deps.store.appendResult(this.deps.questionnaire, record);
     } catch (err) {
-      this.deps.log.error({ err }, "failed to append CSV row");
+      this.deps.log.error({ err }, "failed to save the result row");
     }
     this.deps.log.info({ outcome: record.outcome, eligible: record.eligible, answers: record.answers }, "call finalized");
     this.deps.onFinished?.(record, this.transcript);

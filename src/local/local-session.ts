@@ -8,6 +8,7 @@ import { connectFlux, type FluxEvents, type FluxOptions, type FluxTurnEvent, typ
 import { ElevenLabsTurn, type ElevenLabsTurnEvents, type ElevenLabsTurnOptions } from "./elevenlabs-tts.js";
 import { SentenceChunker } from "./sentences.js";
 import type { ElevenLabsVoiceSpec } from "./voice-spec.js";
+import type { CallStore } from "../storage/store.js";
 
 /** The browser side of the local test, abstracted so tests can observe it. */
 export interface BrowserLink {
@@ -35,8 +36,7 @@ export interface LocalVoiceDeps {
   sampleRate: number;
   eotThreshold: number;
   eagerEotThreshold?: number;
-  csvPath?: string;
-  transcriptsDir?: string;
+  store?: CallStore;
   firstName?: string;
   recordingEnabled?: boolean;
   /** Test seams. */
@@ -118,8 +118,7 @@ export class LocalVoiceSession {
       transport,
       log: deps.log,
       recordingEnabled: deps.recordingEnabled ?? false,
-      csvPath: deps.csvPath,
-      transcriptsDir: deps.transcriptsDir,
+      store: deps.store,
       onFinished: (record) => {
         deps.onFinished?.(record);
         this.link.sendJson({ type: "result", outcome: record.outcome, eligible: record.eligible, answers: record.answers });

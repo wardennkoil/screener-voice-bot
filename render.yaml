@@ -1,0 +1,37 @@
+# Render Blueprint: the screener on Render's free web service, with data in a free Neon Postgres.
+# Render → New → Blueprint → pick this repo. See README "Deploy free on Render + Neon".
+#
+# The free service sleeps after 15 idle minutes (the next request waits ~1 minute) and its disk is
+# wiped on every restart, which is why DATABASE_URL is required here. The phone path stays off:
+# Twilio webhooks cannot wait for a sleeping server.
+services:
+  - type: web
+    name: screener-voice-bot
+    runtime: node
+    plan: free
+    # tsx runs the TypeScript directly and is a dev dependency, so install those too.
+    buildCommand: npm ci --include=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Guards /admin and /local. Render generates it; copy it from the Environment tab to log in.
+      - key: ADMIN_TOKEN
+        generateValue: true
+      # Pasted in when you create the Blueprint (never committed).
+      - key: DATABASE_URL
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: DEEPGRAM_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      # Leave empty to use the default voice (Juniper needs a paid ElevenLabs plan; Sarah is EXAVITQu4vr4xnSDxMaL).
+      - key: ELEVENLABS_VOICE_ID
+        sync: false
+      - key: ELEVENLABS_MODEL_ID
+        value: eleven_turbo_v2_5
+      - key: OPENROUTER_MODEL
+        value: openai/gpt-5.6-luna

@@ -5,7 +5,7 @@ import pino from "pino";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { AnalysisService } from "../src/analytics/service.js";
-import { AnalyticsStore } from "../src/analytics/store.js";
+import { FileAnalyticsStore, FileCallStore } from "../src/storage/file-store.js";
 import type { LlmAdapter } from "../src/conversation/llm.js";
 import { sampleTranscript, stubAnalyst } from "./analytics-fixture.js";
 import { sampleQuestionnaire } from "./helpers.js";
@@ -22,7 +22,7 @@ async function setup(token?: string) {
   const short = sampleTranscript("LOCAL-2");
   short.turns = short.turns.slice(0, 1);
   await writeFile(join(calls, "LOCAL-2.json"), JSON.stringify(short));
-  const store = new AnalyticsStore(calls, analysis);
+  const store = new FileAnalyticsStore(calls, analysis);
   const analyst = stubAnalyst();
   const service = new AnalysisService({ store, questionnaire: sampleQuestionnaire(), llm: analyst, model: "stub:model", log });
   const app = await buildApp({
@@ -30,10 +30,10 @@ async function setup(token?: string) {
     llm: noLlm,
     voice: { elevenLabsVoice: "V", eotThreshold: 0.7, interruptSensitivity: "medium" },
     recordingEnabled: false,
-    csvPath: "/dev/null",
-    transcriptsDir: calls,
+    store: new FileCallStore(undefined, calls),
+    accessToken: token,
     log,
-    admin: { store, service, token },
+    admin: { store, service },
   });
   return { app, dir, analysis, service, analyst };
 }

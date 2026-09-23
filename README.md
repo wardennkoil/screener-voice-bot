@@ -77,14 +77,25 @@ Outcomes: `completed`, `partial`, `declined`, `callback_requested`, `wrong_perso
 
 ## Admin panel & call analytics
 
-Open `http://localhost:3000/admin` while the server runs. It lists every saved call (`data/calls/*.json`) and shows:
+Open `http://localhost:3000/admin` while the server runs. It lists every saved call (`data/calls/*.json`, or the database when `DATABASE_URL` is set) and shows:
 
 - **Overview**: outcomes, completion and eligibility, how far calls get through the questions (drop-off), the most common ways conversations leave the plan, sentiment mix, calls that need attention, answers the analyst doubts, and recommendations collected across calls.
 - **Per call**: the transcript with tool calls, interruptions and system notes in place; a sentiment line over the call with off-plan moments marked; the AI analysis (summary, sentiment, each deviation from the plan with how well the bot handled it and a suggested fix, plan adherence, bot quality ratings, key moments, recommendations); planned vs actual question order with recorded values next to the person's own words; and measured mechanics (reply latency, talk-time share, interruptions, silence nudges, tool errors).
 
-Each finished call is analyzed automatically in the background. The analyst model receives the bot's actual system prompt as "the plan", so deviations are judged against exactly what the bot was told. Results are cached in `data/analysis/<call>.json` and marked out of date if the transcript changes. Use **Analyze all pending** for calls saved before the panel existed. `ANALYSIS_MODEL` picks a different model for analysis. Latency does not matter there, so a stronger model is a cheap upgrade.
+Each finished call is analyzed automatically in the background. The analyst model receives the bot's actual system prompt as "the plan", so deviations are judged against exactly what the bot was told. Results are cached (in `data/analysis/<call>.json`, or the database) and marked out of date if the transcript changes. Use **Analyze all pending** for calls saved before the panel existed. `ANALYSIS_MODEL` picks a different model for analysis. Latency does not matter there, so a stronger model is a cheap upgrade.
 
-Transcripts contain health answers: without `ADMIN_TOKEN` the panel refuses anything that is not a direct localhost request (including requests through your ngrok tunnel).
+Transcripts contain health answers: without `ADMIN_TOKEN` the panel refuses anything that is not a direct localhost request (including requests through your ngrok tunnel). The laptop page `/local` follows the same rule, since every call on it spends Deepgram, ElevenLabs and OpenRouter credits. With a token, open `/admin?token=<ADMIN_TOKEN>` (or `/local?token=...`) once; a cookie then keeps you signed in to both. **Download results** in the panel header exports the results CSV for laptop or phone calls.
+
+## Deploy free on Render + Neon
+
+Render's free web service runs the laptop page and the admin panel online. Its disk is wiped on every restart, so the data goes to a free Neon Postgres database instead (`DATABASE_URL`). Render's own free Postgres is deleted after 30 days; Neon's is not. The phone path stays off there: the free service sleeps after 15 idle minutes, the next request waits about a minute, and Twilio webhooks cannot wait that long.
+
+1. **Neon** ([neon.com](https://neon.com)): sign up (no card), create a project, and copy the **pooled** connection string (`postgresql://...-pooler...?sslmode=require`).
+2. **Render** ([render.com](https://render.com)): sign up and connect GitHub with access to this repository.
+3. Render → **New → Blueprint** → pick the repository and branch. It reads [`render.yaml`](render.yaml) and asks for the secrets: `DATABASE_URL` (from step 1), `OPENROUTER_API_KEY`, `DEEPGRAM_API_KEY`, `ELEVENLABS_API_KEY`, and optionally `ELEVENLABS_VOICE_ID` (leave empty for the default voice; on a free ElevenLabs plan use a premade voice such as Sarah `EXAVITQu4vr4xnSDxMaL`).
+4. When the deploy is live, copy `ADMIN_TOKEN` from the service's **Environment** tab (Render generated it) and open `https://<your-app>.onrender.com/admin?token=<ADMIN_TOKEN>` once. The laptop page is at `/local`.
+
+The tables are created on first start. To bring your existing local calls along, run `DATABASE_URL=<neon string> npm run db:import` on your machine: it copies `data/calls`, `data/analysis` and both results CSVs, and it is safe to re-run.
 
 ## Making it feel human (tuning knobs)
 

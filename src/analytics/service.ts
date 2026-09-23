@@ -1,9 +1,9 @@
 import type { LlmAdapter } from "../conversation/llm.js";
 import type { Logger } from "../logger.js";
 import type { Questionnaire } from "../screening/schema.js";
-import { transcriptFileId, type Transcript } from "../storage/transcripts.js";
-import { analyzeCall, transcriptHash, type StoredAnalysis } from "./analyze.js";
-import { isValidSid, type AnalyticsStore } from "./store.js";
+import type { AnalyticsStore } from "../storage/store.js";
+import { isValidSid, transcriptFileId, type Transcript } from "../storage/transcripts.js";
+import { analyzeCall, isAnalysisCurrent, transcriptHash, type StoredAnalysis } from "./analyze.js";
 
 export type AnalysisStatus = "none" | "queued" | "running" | "done" | "stale" | "error" | "too_short";
 
@@ -55,7 +55,7 @@ export class AnalysisService {
     if (this.queue.includes(sid)) return { status: "queued" };
     const error = this.errors.get(sid);
     if (error) return { status: "error", error };
-    if (stored) return { status: t && stored.transcriptHash !== transcriptHash(t) ? "stale" : "done" };
+    if (stored) return { status: t && !isAnalysisCurrent(stored, t) ? "stale" : "done" };
     if (t && isTooShort(t)) return { status: "too_short" };
     return { status: "none" };
   }
@@ -66,7 +66,7 @@ export class AnalysisService {
     const stored = await Promise.all(candidates.map((t) => this.deps.store.analysis(this.sidOf(t))));
     let n = 0;
     candidates.forEach((t, i) => {
-      const current = stored[i] && stored[i].transcriptHash === transcriptHash(t);
+      const current = stored[i] && isAnalysisCurrent(stored[i], t);
       if (!current && this.enqueue(this.sidOf(t))) n++;
     });
     return n;

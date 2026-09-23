@@ -46,6 +46,8 @@ const EnvSchema = z.object({
   /** Model for post-call analysis; defaults to the conversation model. Latency does not matter here, so a stronger model pays off. */
   ANALYSIS_MODEL: z.string().min(1).optional(),
   ANALYSIS_DIR: z.string().default("data/analysis"),
+  /** Postgres connection string. When set, transcripts, results and analyses live there instead of data/ (hosts without a disk). */
+  DATABASE_URL: z.string().min(1).optional(),
 
   /** Twilio trial accounts cannot run ConversationRelay; dialing is refused unless this is set. */
   ALLOW_TRIAL_CALLS: boolFromEnv.default(false),
@@ -63,7 +65,9 @@ let cached: Env | undefined;
 
 export function env(): Env {
   if (cached) return cached;
-  const parsed = EnvSchema.safeParse(process.env);
+  // A blank `KEY=` line (as copied from .env.example) means "not set", not an empty value.
+  const set = Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== undefined && v.trim() !== ""));
+  const parsed = EnvSchema.safeParse(set);
   if (!parsed.success) {
     throw new Error(`Invalid environment:\n${z.prettifyError(parsed.error)}`);
   }

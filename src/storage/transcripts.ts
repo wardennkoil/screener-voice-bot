@@ -48,6 +48,13 @@ export function newTranscript(init: Pick<Transcript, "callSid" | "contactId" | "
   return { ...init, startedAt: new Date().toISOString(), turns: [], toolCalls: [], metrics: [], relayEvents: [], notes: [] };
 }
 
+const SID_RE = /^[A-Za-z0-9_-]{1,128}$/;
+
+/** A transcript id safe to use as a file name or key (what transcriptFileId produces). */
+export function isValidSid(sid: string): boolean {
+  return SID_RE.test(sid);
+}
+
 /** The file name (without .json) a call's transcript is saved under; also the call's id in the admin panel. */
 export function transcriptFileId(callSid: string): string {
   return callSid.replace(/[^A-Za-z0-9_-]/g, "_");

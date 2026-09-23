@@ -56,6 +56,12 @@ export function adminPageHtml(opts: { studyName: string; persona: string; model:
   .btn.primary { background: var(--s1); border-color: var(--s1); color: #fff; }
   .btn.primary:hover { filter: brightness(1.08); }
   .btn:disabled { opacity: .5; cursor: default; }
+  .menu { position: relative; }
+  .menu > summary { list-style: none; }
+  .menu > summary::-webkit-details-marker { display: none; }
+  .menu-list { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; min-width: 190px; padding: 4px; background: var(--raised); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.14); }
+  .menu-list a { display: block; padding: 6px 10px; border-radius: 6px; color: var(--ink); text-decoration: none; font-size: 13px; }
+  .menu-list a:hover { background: var(--hover); }
   .tag { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; white-space: nowrap; }
 
   nav.rail { border-right: 1px solid var(--line); background: var(--surface); overflow-y: auto; }
@@ -193,6 +199,13 @@ export function adminPageHtml(opts: { studyName: string; persona: string; model:
     <span class="study">${escapeHtml(opts.studyName)}</span>
     <span class="spacer"></span>
     <span class="tag" title="Model used for analysis">${escapeHtml(opts.model)}</span>
+    <details class="menu" id="download">
+      <summary class="btn">Download results</summary>
+      <div class="menu-list">
+        <a href="/admin/api/results.csv?source=local" download>Laptop calls (CSV)</a>
+        <a href="/admin/api/results.csv?source=phone" download>Phone calls (CSV)</a>
+      </div>
+    </details>
     <button class="btn" id="analyzeAll">Analyze all pending</button>
   </header>
   <nav class="rail" id="rail"><div class="empty">Loading…</div></nav>
@@ -581,6 +594,10 @@ let resizeTimer;
 window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (state.route.view === "call" && state.detail && state.detail.analysis) drawSentiment(state.detail, state.detail.analysis.analysis); }, 150); });
 
 /* ---------- actions ---------- */
+document.addEventListener("click", (e) => {
+  const menu = $("#download");
+  if (menu.open && (!menu.contains(e.target) || e.target.closest(".menu-list a"))) menu.open = false;
+});
 document.addEventListener("click", async (e) => {
   const j = e.target.closest("[data-jump]");
   if (j) { jumpTo(+j.dataset.jump); return; }

@@ -61,8 +61,7 @@ export async function registerRelayRoute(app: FastifyInstance, deps: AppDeps, re
           transport,
           log: log.child({ callSid, contactId: payload.contactId }),
           recordingEnabled: deps.recordingEnabled,
-          csvPath: deps.csvPath,
-          transcriptsDir: deps.transcriptsDir,
+          store: deps.store,
           onFinished: (record) => {
             tracked.finalized = true;
             tracked.outcome = record.outcome;

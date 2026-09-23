@@ -5,6 +5,7 @@ import type { Transport } from "../conversation/transport.js";
 import type { Logger } from "../logger.js";
 import type { Questionnaire } from "../screening/schema.js";
 import type { CallRecord } from "../storage/csv.js";
+import { FileCallStore } from "../storage/file-store.js";
 
 /** Simulated participants: a second model plays a person with a persona. */
 export const PERSONAS: Record<string, { profile: string; expect: Partial<Pick<CallRecord, "outcome" | "eligible">> }> = {
@@ -101,8 +102,7 @@ export async function runSimulation(opts: SimulationOptions): Promise<Simulation
     transport,
     log: opts.log,
     recordingEnabled: false,
-    csvPath: `${opts.outDir}/results.csv`,
-    transcriptsDir: `${opts.outDir}/calls`,
+    store: new FileCallStore(`${opts.outDir}/results.csv`, `${opts.outDir}/calls`),
     timers: { firstUtteranceMs: 800, silenceMs: 1500, maxEndGraceMs: 300 },
     onFinished: (record) => finished(record),
   });

@@ -71,6 +71,23 @@ export function recordToRow(q: Questionnaire, r: CallRecord): string[] {
   return cols.map((c) => flat[c] ?? "");
 }
 
+/** The CSV columns and values for one record, keyed by column; how results are kept outside CSV files. */
+export function recordToFields(q: Questionnaire, r: CallRecord): Record<string, string> {
+  const row = recordToRow(q, r);
+  return Object.fromEntries(csvColumns(q).map((c, i) => [c, row[i] ?? ""]));
+}
+
+/**
+ * CSV text for stored result rows: the current questionnaire's columns first, then any
+ * columns only older rows have, so editing the questionnaire never drops collected data.
+ */
+export function fieldsToCsv(q: Questionnaire, rows: Array<Record<string, string>>): string {
+  const columns = csvColumns(q);
+  const known = new Set(columns);
+  for (const row of rows) for (const key of Object.keys(row)) if (!known.has(key)) (known.add(key), columns.push(key));
+  return stringify([columns, ...rows.map((row) => columns.map((c) => row[c] ?? ""))]);
+}
+
 export class CsvHeaderMismatchError extends Error {
   constructor(path: string, expected: string[], found: string[]) {
     super(
