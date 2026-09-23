@@ -41,6 +41,12 @@ const EnvSchema = z.object({
   TRANSCRIPTS_DIR: z.string().default("data/calls"),
   RECORD_CALLS: boolFromEnv.default(false),
 
+  /** Admin panel at /admin. Required for access from anywhere but localhost. */
+  ADMIN_TOKEN: z.string().min(12).optional(),
+  /** Model for post-call analysis; defaults to the conversation model. Latency does not matter here, so a stronger model pays off. */
+  ANALYSIS_MODEL: z.string().min(1).optional(),
+  ANALYSIS_DIR: z.string().default("data/analysis"),
+
   /** Twilio trial accounts cannot run ConversationRelay; dialing is refused unless this is set. */
   ALLOW_TRIAL_CALLS: boolFromEnv.default(false),
   MAX_CONCURRENT_CALLS: z.coerce.number().int().min(1).max(20).default(2),

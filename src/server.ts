@@ -1,4 +1,6 @@
 import { buildApp } from "./app.js";
+import { AnalysisService } from "./analytics/service.js";
+import { AnalyticsStore } from "./analytics/store.js";
 import { env, requireTwilio, type TwilioEnv } from "./config.js";
 import { createLlm, describeLlm } from "./conversation/llm-factory.js";
 import { checkElevenLabsVoice } from "./local/elevenlabs-voices.js";
@@ -23,6 +25,17 @@ async function main(): Promise<void> {
   const questionnaire = await loadQuestionnaire(e.QUESTIONNAIRE_PATH);
   const llm = createLlm(e, logger);
   const llmChoice = describeLlm(e);
+
+  // Post-call analysis: latency does not matter, so allow long, deliberate output.
+  const analysisChoice = describeLlm(e, e.ANALYSIS_MODEL);
+  const analysisStore = new AnalyticsStore(e.TRANSCRIPTS_DIR, e.ANALYSIS_DIR);
+  const analysisService = new AnalysisService({
+    store: analysisStore,
+    questionnaire,
+    llm: createLlm(e, logger, e.ANALYSIS_MODEL, { maxOutputTokens: 6000, reasoning: "medium", timeoutMs: 180_000 }),
+    model: `${analysisChoice.provider}:${analysisChoice.model}`,
+    log: logger.child({ mode: "analysis" }),
+  });
 
   let twilio: TwilioEnv | undefined;
   try {
@@ -73,6 +86,7 @@ async function main(): Promise<void> {
     skipSignatureCheck: process.env.SKIP_TWILIO_SIGNATURE_CHECK === "true",
     twilioAccountType,
     allowTrialCalls: e.ALLOW_TRIAL_CALLS,
+    admin: { store: analysisStore, service: analysisService, token: e.ADMIN_TOKEN },
   });
 
   let shuttingDown = false;
@@ -96,6 +110,8 @@ async function main(): Promise<void> {
       llm: `${llmChoice.provider}:${llmChoice.model}`,
       phone: twilio ? `enabled via ${twilio.publicHost} (account ${twilioAccountType ?? "unknown"})` : "disabled",
       local: local ? `http://localhost:${e.PORT}/local` : "disabled",
+      admin: `http://localhost:${e.PORT}/admin${e.ADMIN_TOKEN ? " (token required)" : " (localhost only)"}`,
+      analysisModel: `${analysisChoice.provider}:${analysisChoice.model}`,
       voice: `${local?.voice.voiceId ?? e.ELEVENLABS_VOICE} ${local?.voice.modelId ?? ""}`.trim(),
       eotThreshold: e.EOT_THRESHOLD,
       csv: e.OUTPUT_CSV,

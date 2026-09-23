@@ -19,6 +19,8 @@ export interface LocalRouteDeps {
   csvPath: string;
   transcriptsDir: string;
   recordingEnabled: boolean;
+  /** Called once a finished call's transcript is on disk (queues its analysis). */
+  onCallSaved?(callSid: string): void;
   /** Test seams passed through to the session. */
   sttFactory?: LocalVoiceDeps["sttFactory"];
   ttsFactory?: LocalVoiceDeps["ttsFactory"];
@@ -78,6 +80,9 @@ export async function registerLocalRoutes(app: FastifyInstance, deps: LocalRoute
             firstName,
             sttFactory: deps.sttFactory,
             ttsFactory: deps.ttsFactory,
+            onFinished: (record) => {
+              if (record.transcript_path) deps.onCallSaved?.(record.call_sid);
+            },
           },
           link,
         );

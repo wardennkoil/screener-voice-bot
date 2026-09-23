@@ -68,6 +68,7 @@ export async function registerRelayRoute(app: FastifyInstance, deps: AppDeps, re
             tracked.outcome = record.outcome;
             tracked.eligible = record.eligible;
             tracked.status = "finished";
+            if (record.transcript_path) deps.onCallSaved?.(callSid);
           },
         });
         tracked.session = session;

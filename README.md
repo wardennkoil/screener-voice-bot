@@ -75,6 +75,17 @@ The control API (`POST /calls`, `GET /calls/:sid`) is what the dial CLI talks to
 
 Outcomes: `completed`, `partial`, `declined`, `callback_requested`, `wrong_person`, `voicemail`, `no_response`, `hung_up`, `no_answer`, `busy`, `failed`. Eligibility: `yes`, `no`, `undetermined`.
 
+## Admin panel & call analytics
+
+Open `http://localhost:3000/admin` while the server runs. It lists every saved call (`data/calls/*.json`) and shows:
+
+- **Overview**: outcomes, completion and eligibility, how far calls get through the questions (drop-off), the most common ways conversations leave the plan, sentiment mix, calls that need attention, answers the analyst doubts, and recommendations collected across calls.
+- **Per call**: the transcript with tool calls, interruptions and system notes in place; a sentiment line over the call with off-plan moments marked; the AI analysis (summary, sentiment, each deviation from the plan with how well the bot handled it and a suggested fix, plan adherence, bot quality ratings, key moments, recommendations); planned vs actual question order with recorded values next to the person's own words; and measured mechanics (reply latency, talk-time share, interruptions, silence nudges, tool errors).
+
+Each finished call is analyzed automatically in the background. The analyst model receives the bot's actual system prompt as "the plan", so deviations are judged against exactly what the bot was told. Results are cached in `data/analysis/<call>.json` and marked out of date if the transcript changes. Use **Analyze all pending** for calls saved before the panel existed. `ANALYSIS_MODEL` picks a different model for analysis. Latency does not matter there, so a stronger model is a cheap upgrade.
+
+Transcripts contain health answers: without `ADMIN_TOKEN` the panel refuses anything that is not a direct localhost request (including requests through your ngrok tunnel).
+
 ## Making it feel human (tuning knobs)
 
 | Knob | Where | Notes |
