@@ -29,6 +29,16 @@ export async function checkElevenLabsVoice(apiKey: string, voiceId: string, log:
       .filter((v) => /conversational|informative|professional/i.test(`${v.labels?.use_case ?? ""} ${v.labels?.descriptive ?? ""}`))
       .slice(0, 8)
       .map((v) => `${v.name.split(" - ")[0]} ${v.voice_id}`);
+    // A Voice Library voice is a different fix: ElevenLabs refuses those over the API on free plans (402 paid_plan_required).
+    const shared = await fetchImpl(`https://api.elevenlabs.io/v1/shared-voices?page_size=5&search=${encodeURIComponent(voiceId)}`, { headers: { "xi-api-key": apiKey } }).catch(() => undefined);
+    const libraryVoice = shared?.ok ? (((await shared.json()) as { voices?: VoiceSummary[] }).voices ?? []).find((v) => v.voice_id === voiceId) : undefined;
+    if (libraryVoice) {
+      log.error(
+        { voiceId, name: libraryVoice.name, suggestions },
+        "The configured ElevenLabs voice is a Voice Library voice; free ElevenLabs plans cannot use library voices over the API, so laptop mode will produce no audio. Upgrade the ElevenLabs plan, or set ELEVENLABS_VOICE_ID to one of the suggestions",
+      );
+      return false;
+    }
     log.error(
       { voiceId, suggestions },
       "The configured ElevenLabs voice is not in your library; set ELEVENLABS_VOICE_ID to one of the suggestions (laptop mode will produce no audio until then)",

@@ -32,7 +32,7 @@ const EnvSchema = z.object({
   /** Deepgram Flux eager end-of-turn threshold (0.3-0.9); unset disables speculative replies. */
   LOCAL_EAGER_EOT_THRESHOLD: z.coerce.number().min(0.3).max(0.9).optional(),
 
-  ELEVENLABS_VOICE: z.string().default("UgBBYS2sOqTuMpoF3BR0-flash_v2_5-1.0_0.5_0.75"),
+  ELEVENLABS_VOICE: z.string().default("aMSt68OGf4xUZAnLpTU8-flash_v2_5-1.0_0.5_0.75"),
   EOT_THRESHOLD: z.coerce.number().min(0.5).max(0.9).default(0.7),
   INTERRUPT_SENSITIVITY: z.enum(["high", "medium", "low"]).default("medium"),
 
