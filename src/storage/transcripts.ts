@@ -48,10 +48,14 @@ export function newTranscript(init: Pick<Transcript, "callSid" | "contactId" | "
   return { ...init, startedAt: new Date().toISOString(), turns: [], toolCalls: [], metrics: [], relayEvents: [], notes: [] };
 }
 
+/** The file name (without .json) a call's transcript is saved under; also the call's id in the admin panel. */
+export function transcriptFileId(callSid: string): string {
+  return callSid.replace(/[^A-Za-z0-9_-]/g, "_");
+}
+
 export async function saveTranscript(dir: string, t: Transcript): Promise<string> {
   await mkdir(dir, { recursive: true });
-  const safeSid = t.callSid.replace(/[^A-Za-z0-9_-]/g, "_");
-  const path = join(dir, `${safeSid}.json`);
+  const path = join(dir, `${transcriptFileId(t.callSid)}.json`);
   await writeFile(path, JSON.stringify(t, null, 2), "utf8");
   return path;
 }

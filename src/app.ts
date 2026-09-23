@@ -5,6 +5,7 @@ import type { TwilioEnv } from "./config.js";
 import type { LlmAdapter } from "./conversation/llm.js";
 import type { CallSession } from "./conversation/session.js";
 import type { Logger } from "./logger.js";
+import { registerAdminRoutes, type AdminDeps } from "./routes/admin.js";
 import { registerCallRoutes } from "./routes/calls.js";
 import { registerLocalRoutes, type LocalRouteDeps } from "./routes/local.js";
 import { registerRelayRoute } from "./routes/relay-ws.js";
@@ -45,7 +46,9 @@ export interface AppDeps {
   twilio?: TwilioEnv;
   dialer?: DialerLike;
   /** Laptop voice mode; registered when present. */
-  local?: Omit<LocalRouteDeps, "questionnaire" | "llm" | "log" | "recordingEnabled">;
+  local?: Omit<LocalRouteDeps, "questionnaire" | "llm" | "log" | "recordingEnabled" | "onCallSaved">;
+  /** Admin panel at /admin with post-call analysis; registered when present. */
+  admin?: AdminDeps;
   voice: VoiceSettings;
   recordingEnabled: boolean;
   csvPath: string;
@@ -57,6 +60,8 @@ export interface AppDeps {
   twilioAccountType?: string;
   /** Let trial accounts dial anyway (the relay verb is blocked on them, so calls end in seconds). */
   allowTrialCalls?: boolean;
+  /** Called once a finished call's transcript is on disk; buildApp wires it to the analysis queue. */
+  onCallSaved?(callSid: string): void;
 }
 
 /** AppDeps with the phone path present; what the Twilio routes require. */
@@ -97,6 +102,18 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(formbody);
   await app.register(websocket, { options: { maxPayload: 1_048_576 } });
 
+  if (deps.admin) {
+    const service = deps.admin.service;
+    const outer = deps.onCallSaved;
+    deps = {
+      ...deps,
+      onCallSaved: (sid) => {
+        outer?.(sid);
+        service.enqueue(sid);
+      },
+    };
+  }
+
   const registry = new CallRegistry();
   app.decorate("callRegistry", registry);
 
@@ -118,7 +135,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   }
 
   if (deps.local) {
-    await registerLocalRoutes(app, { ...deps.local, questionnaire: deps.questionnaire, llm: deps.llm, log: deps.log, recordingEnabled: deps.recordingEnabled });
+    await registerLocalRoutes(app, { ...deps.local, questionnaire: deps.questionnaire, llm: deps.llm, log: deps.log, recordingEnabled: deps.recordingEnabled, onCallSaved: deps.onCallSaved });
+  }
+
+  if (deps.admin) {
+    await registerAdminRoutes(app, { ...deps.admin, questionnaire: deps.questionnaire });
   }
 
   return app;

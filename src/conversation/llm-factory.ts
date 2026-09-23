@@ -22,20 +22,29 @@ export function describeLlm(e: Env, modelOverride?: string): LlmChoice {
   return { provider, model: modelOverride ?? e.OPENROUTER_MODEL };
 }
 
+/** Overrides for non-conversational uses (e.g. call analysis wants longer, more deliberate output). */
+export interface LlmTuning {
+  maxOutputTokens?: number;
+  reasoning?: "low" | "medium" | "high";
+  timeoutMs?: number;
+}
+
 /** The one place that turns configuration into a model adapter. */
-export function createLlm(e: Env, log: Logger, modelOverride?: string): LlmAdapter {
+export function createLlm(e: Env, log: Logger, modelOverride?: string, tuning: LlmTuning = {}): LlmAdapter {
   const choice = describeLlm(e, modelOverride);
   if (choice.provider === "gemini") {
     if (!e.GEMINI_API_KEY) throw new Error("LLM_PROVIDER=gemini needs GEMINI_API_KEY (see .env.example)");
     if (!e.OPENROUTER_API_KEY && e.LLM_PROVIDER !== "gemini") log.warn("OPENROUTER_API_KEY is not set; using the direct Gemini key instead. Add OPENROUTER_API_KEY to route through OpenRouter.");
-    return new GeminiInteractionsAdapter({ apiKey: e.GEMINI_API_KEY, model: choice.model, thinkingLevel: e.GEMINI_THINKING_LEVEL, log });
+    return new GeminiInteractionsAdapter({ apiKey: e.GEMINI_API_KEY, model: choice.model, thinkingLevel: tuning.reasoning ?? e.GEMINI_THINKING_LEVEL, maxOutputTokens: tuning.maxOutputTokens, timeoutMs: tuning.timeoutMs, log });
   }
   if (!e.OPENROUTER_API_KEY) throw new Error("Missing OPENROUTER_API_KEY (see .env.example), or set LLM_PROVIDER=gemini");
   return new OpenRouterAdapter({
     apiKey: e.OPENROUTER_API_KEY,
     model: choice.model,
-    reasoningEffort: e.OPENROUTER_REASONING_EFFORT,
+    reasoningEffort: tuning.reasoning ?? e.OPENROUTER_REASONING_EFFORT,
     providerSort: e.OPENROUTER_PROVIDER_SORT,
+    maxOutputTokens: tuning.maxOutputTokens,
+    timeoutMs: tuning.timeoutMs,
     log,
   });
 }

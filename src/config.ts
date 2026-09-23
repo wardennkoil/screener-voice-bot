@@ -32,7 +32,7 @@ const EnvSchema = z.object({
   /** Deepgram Flux eager end-of-turn threshold (0.3-0.9); unset disables speculative replies. */
   LOCAL_EAGER_EOT_THRESHOLD: z.coerce.number().min(0.3).max(0.9).optional(),
 
-  ELEVENLABS_VOICE: z.string().default("UgBBYS2sOqTuMpoF3BR0-flash_v2_5-1.0_0.5_0.75"),
+  ELEVENLABS_VOICE: z.string().default("aMSt68OGf4xUZAnLpTU8-flash_v2_5-1.0_0.5_0.75"),
   EOT_THRESHOLD: z.coerce.number().min(0.5).max(0.9).default(0.7),
   INTERRUPT_SENSITIVITY: z.enum(["high", "medium", "low"]).default("medium"),
 
@@ -40,6 +40,12 @@ const EnvSchema = z.object({
   OUTPUT_CSV: z.string().default("data/screening_results.csv"),
   TRANSCRIPTS_DIR: z.string().default("data/calls"),
   RECORD_CALLS: boolFromEnv.default(false),
+
+  /** Admin panel at /admin. Required for access from anywhere but localhost. */
+  ADMIN_TOKEN: z.string().min(12).optional(),
+  /** Model for post-call analysis; defaults to the conversation model. Latency does not matter here, so a stronger model pays off. */
+  ANALYSIS_MODEL: z.string().min(1).optional(),
+  ANALYSIS_DIR: z.string().default("data/analysis"),
 
   /** Twilio trial accounts cannot run ConversationRelay; dialing is refused unless this is set. */
   ALLOW_TRIAL_CALLS: boolFromEnv.default(false),
