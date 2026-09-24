@@ -1,6 +1,6 @@
 import type { FlatQuestion, Questionnaire } from "./schema.js";
 import { flattenQuestions } from "./schema.js";
-import { evaluateEligibility, isApplicable, type EligibilityResult } from "./eligibility.js";
+import { computeBmi, evaluateEligibility, isApplicable, type EligibilityResult } from "./eligibility.js";
 import { validateAnswer, type AnswerValue } from "./validate.js";
 
 export type Stage = "opening" | "identity" | "consent" | "screening" | "closing" | "ended";
@@ -61,6 +61,11 @@ export class ScreeningState {
 
   eligibility(): EligibilityResult {
     return evaluateEligibility(this.questionnaire, this.answerValues(), new Set(this.skipped.keys()));
+  }
+
+  /** BMI from the height and weight answers, when the questionnaire has a bmi rule and both are known. */
+  bmi(): number | undefined {
+    return computeBmi(this.questionnaire, this.answerValues());
   }
 
   /** True once every applicable required question is answered or explicitly skipped. */

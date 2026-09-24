@@ -2,8 +2,8 @@ import pino from "pino";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HistoryStep, LlmAdapter, LlmRunHandlers, LlmRunParams, LlmRunResult } from "../src/conversation/llm.js";
 import type { FluxEvents, SttStream } from "../src/local/deepgram-flux.js";
-import type { ElevenLabsTurnEvents } from "../src/local/elevenlabs-tts.js";
-import { isBackchannel, LocalVoiceSession, proportionalHeard, type BrowserLink, type TtsTurn } from "../src/local/local-session.js";
+import { isBackchannel, LocalVoiceSession, proportionalHeard, type BrowserLink } from "../src/local/local-session.js";
+import type { TtsTurn, TtsTurnEvents } from "../src/local/tts.js";
 import type { CallRecord } from "../src/storage/csv.js";
 import { sampleQuestionnaire } from "./helpers.js";
 
@@ -34,7 +34,7 @@ class FakeTts implements TtsTurn {
   aborted = false;
   private chars: string[] = [];
   deliveredMs = 0;
-  constructor(readonly events: ElevenLabsTurnEvents) {}
+  constructor(readonly events: TtsTurnEvents) {}
   sendText(text: string) {
     this.sent.push(text);
   }
@@ -97,8 +97,7 @@ function setup(script: Script[]) {
       llm,
       log: pino({ level: "silent" }),
       deepgramApiKey: "dg",
-      elevenLabsApiKey: "el",
-      voice: { voiceId: "V", modelId: "eleven_flash_v2_5" },
+      tts: { provider: "cartesia", apiKey: "ca", voiceId: "V", modelId: "sonic-3.6" },
       sampleRate: 24000,
       eotThreshold: 0.7,
       firstName: "Jordan",

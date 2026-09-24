@@ -1,0 +1,74 @@
+# Screening questionnaire. Edit freely; the server validates this file on startup.
+#
+# "ask" lines are guidance for the conversational model, not scripts: it will phrase
+# each question naturally, acknowledge answers, and rephrase if the person is confused.
+# Eligibility is decided by the server from the eligible_if rules, never by the model.
+
+study:
+  name: "the Restful Nights sleep study"
+  organization: "the Meridian Sleep Research Center"
+  description_short: "a research study looking at a new non-drug approach to help adults with insomnia sleep better"
+  callback_number_spoken: "five five five, zero one zero, two thousand"
+  next_steps_if_eligible: "someone from the study team will call within two business days to schedule a first visit"
+
+caller:
+  persona_name: "Sam"
+  # false: Sam introduces themselves as "Sam from the study team" without saying the call is automated.
+  # Sam still answers truthfully if asked whether they are a real person. Note that proactive
+  # AI disclosure is legally required for calls into Texas and California (and an FCC rule is pending);
+  # confirm with your ethics board and legal counsel before calling participants with this off.
+  ai_disclosure: false
+
+settings:
+  stop_on_disqualify: false          # keep asking after a disqualifying answer (does not reveal the criterion)
+  reveal_reason_when_ineligible: false
+  max_call_minutes: 15
+  store_verbatim: true               # adds <id>__verbatim columns with the person's own words
+
+questions:
+  - id: age
+    type: integer
+    ask: "How old they are"
+    unit: years
+    valid: { min: 16, max: 110 }
+    eligible_if: { min: 18, max: 65 }
+
+  - id: diagnosed_insomnia
+    type: yes_no
+    ask: "Whether a doctor has ever told them they have insomnia, or they have had trouble falling or staying asleep for three months or more"
+    eligible_if: { equals: true }
+
+  - id: sleep_medication
+    type: yes_no
+    ask: "Whether they currently take any prescription medication to help them sleep"
+    eligible_if: { equals: false }
+    follow_up_if:
+      when: { equals: true }
+      question:
+        id: sleep_medication_name
+        type: free_text
+        ask: "Which medication, only if they are comfortable sharing"
+        required: false
+
+  - id: pregnant_or_nursing
+    type: yes_no
+    ask: "Whether they are currently pregnant or breastfeeding; ask everyone the same neutral way, it is a standard study question"
+    sensitive: true
+    eligible_if: { equals: false }
+
+  - id: can_attend_visits
+    type: yes_no
+    ask: "Whether they could come to the center in downtown Springfield for three visits over six weeks, each about an hour"
+    eligible_if: { equals: true }
+
+  - id: smoker
+    type: single_choice
+    ask: "Whether they smoke: never, used to, or currently"
+    options: [never, former, current]
+
+  - id: best_contact_time
+    type: free_text
+    ask: "When is generally a good time for the study team to reach them by phone, if they qualify"
+    required: false
+
+eligibility: all_rules

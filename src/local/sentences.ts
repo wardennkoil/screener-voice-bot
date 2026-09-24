@@ -2,7 +2,8 @@
  * Turns a token stream into text-to-speech sized pieces. Emits at sentence
  * ends, or at a clause boundary once the buffer is long enough, so the first
  * audio starts early without chopping sentences into unnatural fragments.
- * Every emitted chunk ends with a single space (ElevenLabs' stream rule).
+ * Every emitted chunk ends with a single space, so pieces join cleanly in
+ * the speech provider's stream (ElevenLabs requires it; Cartesia joins pieces verbatim).
  */
 export class SentenceChunker {
   private buffer = "";

@@ -1,5 +1,6 @@
 import WebSocket from "ws";
 import type { Logger } from "../logger.js";
+import type { TtsTurn, TtsTurnEvents } from "./tts.js";
 import type { ElevenLabsVoiceSpec } from "./voice-spec.js";
 
 export interface ElevenLabsTurnOptions {
@@ -10,20 +11,6 @@ export interface ElevenLabsTurnOptions {
   log?: Logger;
   /** Injected in tests. */
   wsFactory?: (url: string, headers: Record<string, string>) => WebSocket;
-}
-
-export interface TtsAudioChunk {
-  pcm: Buffer;
-  /** Absolute ms (from the start of the turn's audio) at which each char starts. */
-  chars: string[];
-  charStartMs: number[];
-}
-
-export interface ElevenLabsTurnEvents {
-  onAudio(chunk: TtsAudioChunk): void;
-  /** All audio for the turn has been delivered. */
-  onFinal(): void;
-  onError(err: Error): void;
 }
 
 interface ServerMessage {
@@ -42,7 +29,7 @@ interface ServerMessage {
  * Keeps a character timeline (from the alignment data) so the caller can tell
  * exactly what the person heard when they interrupt.
  */
-export class ElevenLabsTurn {
+export class ElevenLabsTurn implements TtsTurn {
   private readonly ws: WebSocket;
   private open = false;
   private ended = false;
@@ -56,7 +43,7 @@ export class ElevenLabsTurn {
 
   constructor(
     private readonly opts: ElevenLabsTurnOptions,
-    private readonly events: ElevenLabsTurnEvents,
+    private readonly events: TtsTurnEvents,
   ) {
     const { voice, sampleRate } = opts;
     const url =

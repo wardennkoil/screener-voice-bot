@@ -5,7 +5,9 @@ import { PgStorage } from "./storage/pg-store.js";
 import type { Storage } from "./storage/store.js";
 import { env, requireTwilio, type TwilioEnv } from "./config.js";
 import { createLlm, describeLlm } from "./conversation/llm-factory.js";
+import { checkCartesiaVoice } from "./local/cartesia-voices.js";
 import { checkElevenLabsVoice } from "./local/elevenlabs-voices.js";
+import { modelIdOf, voiceIdOf, type TtsConfig } from "./local/tts.js";
 import { parseElevenLabsVoiceSpec } from "./local/voice-spec.js";
 import { logger } from "./logger.js";
 import { loadQuestionnaire } from "./screening/loader.js";
@@ -61,22 +63,31 @@ async function main(): Promise<void> {
   }
 
   let local: Parameters<typeof buildApp>[0]["local"];
-  if (e.DEEPGRAM_API_KEY && e.ELEVENLABS_API_KEY) {
+  let tts: TtsConfig | undefined;
+  const ttsProvider = e.TTS_PROVIDER ?? (e.CARTESIA_API_KEY || !e.ELEVENLABS_API_KEY ? "cartesia" : "elevenlabs");
+  if (!e.TTS_PROVIDER && ttsProvider === "elevenlabs") logger.warn("CARTESIA_API_KEY is not set: the laptop page speaks with ElevenLabs until it is");
+  if (ttsProvider === "cartesia" && e.CARTESIA_API_KEY) {
+    tts = { provider: "cartesia", apiKey: e.CARTESIA_API_KEY, voiceId: e.CARTESIA_VOICE_ID, modelId: e.CARTESIA_MODEL_ID };
+  } else if (ttsProvider === "elevenlabs" && e.ELEVENLABS_API_KEY) {
     const voice = parseElevenLabsVoiceSpec(e.ELEVENLABS_VOICE, { modelId: e.ELEVENLABS_MODEL_ID });
     if (e.ELEVENLABS_VOICE_ID) voice.voiceId = e.ELEVENLABS_VOICE_ID;
     if (e.ELEVENLABS_MODEL_ID) voice.modelId = e.ELEVENLABS_MODEL_ID;
+    tts = { provider: "elevenlabs", apiKey: e.ELEVENLABS_API_KEY, voice };
+  }
+  if (e.DEEPGRAM_API_KEY && tts) {
     local = {
       deepgramApiKey: e.DEEPGRAM_API_KEY,
-      elevenLabsApiKey: e.ELEVENLABS_API_KEY,
-      voice,
+      tts,
       sampleRate: e.LOCAL_SAMPLE_RATE,
       eotThreshold: e.EOT_THRESHOLD,
       eagerEotThreshold: e.LOCAL_EAGER_EOT_THRESHOLD,
       store: storage.calls("local"),
     };
-    void checkElevenLabsVoice(e.ELEVENLABS_API_KEY, voice.voiceId, logger);
+    if (tts.provider === "cartesia") void checkCartesiaVoice(tts.apiKey, tts.voiceId, logger);
+    else void checkElevenLabsVoice(tts.apiKey, tts.voice.voiceId, logger);
   } else {
-    logger.warn("laptop voice mode disabled (set DEEPGRAM_API_KEY and ELEVENLABS_API_KEY to enable /local)");
+    const missing = [!e.DEEPGRAM_API_KEY && "DEEPGRAM_API_KEY", !tts && (ttsProvider === "cartesia" ? "CARTESIA_API_KEY" : "ELEVENLABS_API_KEY")].filter(Boolean);
+    logger.warn(`laptop voice mode disabled (set ${missing.join(" and ")} to enable /local)`);
   }
 
   const app = await buildApp({
@@ -121,7 +132,8 @@ async function main(): Promise<void> {
       admin: `http://localhost:${e.PORT}/admin`,
       access: e.ADMIN_TOKEN ? "/admin and /local need ADMIN_TOKEN" : "/admin and /local answer on localhost only",
       analysisModel: `${analysisChoice.provider}:${analysisChoice.model}`,
-      voice: `${local?.voice.voiceId ?? e.ELEVENLABS_VOICE} ${local?.voice.modelId ?? ""}`.trim(),
+      voice: local ? `${local.tts.provider} ${voiceIdOf(local.tts)} ${modelIdOf(local.tts)}` : "disabled",
+      phoneVoice: `elevenlabs ${e.ELEVENLABS_VOICE}`,
       eotThreshold: e.EOT_THRESHOLD,
       storage: storage.kind === "postgres" ? "postgres (DATABASE_URL)" : `files (${e.TRANSCRIPTS_DIR}, ${e.OUTPUT_CSV}, ${e.LOCAL_OUTPUT_CSV})`,
     },

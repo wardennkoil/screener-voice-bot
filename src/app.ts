@@ -4,6 +4,7 @@ import websocket from "@fastify/websocket";
 import type { TwilioEnv } from "./config.js";
 import type { LlmAdapter } from "./conversation/llm.js";
 import type { CallSession } from "./conversation/session.js";
+import { modelIdOf, voiceIdOf } from "./local/tts.js";
 import type { Logger } from "./logger.js";
 import { registerAdminRoutes, type AdminDeps } from "./routes/admin.js";
 import { registerCallRoutes } from "./routes/calls.js";
@@ -124,7 +125,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     ok: true,
     activeCalls: registry.activeCount(),
     phone: Boolean(deps.twilio && deps.dialer),
-    local: deps.local ? { voiceId: deps.local.voice.voiceId, modelId: deps.local.voice.modelId, sampleRate: deps.local.sampleRate, eotThreshold: deps.local.eotThreshold } : null,
+    local: deps.local
+      ? { provider: deps.local.tts.provider, voiceId: voiceIdOf(deps.local.tts), modelId: modelIdOf(deps.local.tts), sampleRate: deps.local.sampleRate, eotThreshold: deps.local.eotThreshold }
+      : null,
   }));
 
   if (deps.twilio && deps.dialer) {
@@ -142,7 +145,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   }
 
   if (deps.admin) {
-    await registerAdminRoutes(app, { ...deps.admin, questionnaire: deps.questionnaire, accessToken: deps.accessToken });
+    await registerAdminRoutes(app, { ...deps.admin, questionnaire: deps.questionnaire, accessToken: deps.accessToken, localEnabled: Boolean(deps.local) });
   }
 
   return app;

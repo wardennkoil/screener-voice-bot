@@ -18,6 +18,9 @@ export function localPageHtml(opts: { sampleRate: number; studyName: string; per
   body { margin:0; background:var(--bg); color:var(--ink); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
   main { max-width: 720px; margin: 0 auto; padding: 32px 20px 60px; }
   h1 { font-size: 22px; margin: 0 0 4px; }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .navlink { font-size: 14px; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--ink); text-decoration: none; }
+  .navlink:hover { border-color: var(--accent); color: var(--accent); }
   .sub { color: var(--muted); margin: 0 0 20px; }
   .bar { display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap: wrap; }
   button { font: inherit; padding: 10px 18px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); cursor: pointer; }
@@ -42,7 +45,10 @@ export function localPageHtml(opts: { sampleRate: number; studyName: string; per
 </head>
 <body>
 <main>
-  <h1>Talk to ${escapeHtml(opts.persona)}</h1>
+  <div class="top">
+    <h1>Talk to ${escapeHtml(opts.persona)}</h1>
+    <a id="toAdmin" class="navlink" href="/admin">Call analytics</a>
+  </div>
   <p class="sub">${escapeHtml(opts.studyName)} screener, running on your laptop. Answer the phone like a real person would.</p>
   <div class="bar">
     <label>Your first name <input id="name" value="Jordan" style="font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; width: 120px;"></label>
@@ -186,6 +192,8 @@ function stopAll() {
 }
 
 $("start").onclick = start;
+// Leaving the page would hang up; during a call, open the panel in a new tab instead.
+$("toAdmin").onclick = (e) => { if (ws && ws.readyState === 1) { e.preventDefault(); window.open("/admin", "_blank"); } };
 $("hangup").onclick = () => { if (ws) { ws.send(JSON.stringify({ type: "hangup" })); ws.close(); } };
 </script>
 </body>

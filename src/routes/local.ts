@@ -4,7 +4,7 @@ import type { LlmAdapter } from "../conversation/llm.js";
 import { LocalVoiceSession, type BrowserLink, type LocalVoiceDeps } from "../local/local-session.js";
 import { localPageHtml } from "../local/page.js";
 import type { Questionnaire } from "../screening/schema.js";
-import type { ElevenLabsVoiceSpec } from "../local/voice-spec.js";
+import type { TtsConfig } from "../local/tts.js";
 import type { CallStore } from "../storage/store.js";
 import { guardScope } from "./access.js";
 
@@ -13,8 +13,7 @@ export interface LocalRouteDeps {
   llm: LlmAdapter;
   log: Logger;
   deepgramApiKey: string;
-  elevenLabsApiKey: string;
-  voice: ElevenLabsVoiceSpec;
+  tts: TtsConfig;
   sampleRate: number;
   eotThreshold: number;
   eagerEotThreshold?: number;
@@ -80,8 +79,7 @@ function registerGuardedLocalRoutes(app: FastifyInstance, deps: LocalRouteDeps):
             llm: deps.llm,
             log: req.log.child({ mode: "local" }),
             deepgramApiKey: deps.deepgramApiKey,
-            elevenLabsApiKey: deps.elevenLabsApiKey,
-            voice: deps.voice,
+            tts: deps.tts,
             sampleRate: deps.sampleRate,
             eotThreshold: deps.eotThreshold,
             eagerEotThreshold: deps.eagerEotThreshold,

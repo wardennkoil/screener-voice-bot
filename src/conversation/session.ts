@@ -277,6 +277,8 @@ export class CallSession implements InboundEvents {
       if (a.verbatim) verbatim[id] = a.verbatim;
     }
     for (const [id, reason] of this.state.skipped) answers[id] = `(skipped: ${reason})`;
+    const bmi = this.state.bmi();
+    if (bmi !== undefined) answers.bmi = String(bmi);
     const notes = [...this.state.flags.map((f) => `flag: ${f}`), ...this.transcript.notes];
     if (this.state.endNote) notes.push(`end note: ${this.state.endNote}`);
     return {

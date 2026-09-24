@@ -124,10 +124,10 @@ const PREMATURE =
 function closingGuidance(q: Questionnaire, status: EligibilityStatus, failed: string[]): string {
   switch (status) {
     case "eligible":
-      return `They appear to qualify. Tell them warmly that ${q.study.next_steps_if_eligible}. If you have not already, ask when is a good time to reach them, then say goodbye and call end_call('completed').`;
+      return `They appear to qualify. Tell them warmly that ${q.study.next_steps_if_eligible}; whatever you already said in your last reply counts, so don't repeat it. Then ask if they have any questions, answer them from what you know about the study (the study team handles anything else), and when they have none, say goodbye and call end_call('completed') in that same reply.`;
     case "ineligible": {
       const why = q.settings.reveal_reason_when_ineligible && failed.length ? ` You may say it comes down to the question about ${failed.join(" and ").replace(/_/g, " ")}.` : " Do not say which answer ruled them out.";
-      return `They do not match the current criteria. Thank them sincerely, say this study is not the right fit right now, and that the team may reach out if a suitable study opens.${why} Then say goodbye and call end_call('completed').`;
+      return `They do not match the current criteria. Do not ask any more screening questions. Thank them sincerely, say this study is not the right fit right now, and that the team may reach out if a suitable study opens.${why} Then say goodbye and call end_call('completed').`;
     }
     case "undetermined":
       return `Some answers are missing, so eligibility is undetermined. Thank them, say the study team will review and follow up, say goodbye, and call end_call('completed').`;
@@ -178,7 +178,7 @@ export class ToolHandlers {
       case "record_consent":
         return snap.stage !== "consent";
       case "record_answer":
-        return snap.stage !== "screening" || String(args.question_id ?? "") !== snap.pendingQuestionId;
+        return (snap.stage !== "screening" && snap.stage !== "closing") || String(args.question_id ?? "") !== snap.pendingQuestionId;
       default:
         return false;
     }
@@ -229,7 +229,10 @@ export class ToolHandlers {
     if (result === "confirmed") {
       this.state.stage = "consent";
       const rec = this.ctx.recordingEnabled ? " Recording is on: mention the call is recorded for quality before asking if now is a good time." : "";
-      return { payload: { ok: true, message: `Identity confirmed. Now briefly say why you are calling and ask if they have a few minutes for the screening questions.${rec}` } };
+      const next = this.q.study.consent_script
+        ? `Identity confirmed. Now briefly say why you are calling and ask if now is still a good time to talk for ${this.q.study.call_length_spoken ?? "a few minutes"}. If they say yes, do not call record_consent yet: first give the consent statement from How the call goes and ask if that's okay; record_consent records their answer to that.`
+        : "Identity confirmed. Now briefly say why you are calling and ask if they have a few minutes for the screening questions.";
+      return { payload: { ok: true, message: `${next}${rec}` } };
     }
     this.state.stage = "closing";
     const msg =
@@ -255,33 +258,49 @@ export class ToolHandlers {
     }
     this.state.stage = "screening";
     const next = this.state.nextQuestion();
+    const start = this.q.study.briefing
+      ? "Consent recorded. First explain the study in your own words from the briefing under About the study, then ask the first question."
+      : "Consent recorded. Start the screening questions now.";
     return {
       payload: {
         ok: true,
-        message: `Consent recorded. Start the screening questions now. There are ${this.state.remaining()} questions; ask them one at a time.`,
+        message: `${start} There are ${this.state.remaining()} questions; ask them one at a time.`,
         next_question: next,
         remaining: this.state.remaining(),
       },
     };
   }
 
+  /**
+   * Answers are accepted while screening and after it completed (an optional last question,
+   * or a correction), but never before consent or once the call is ending.
+   */
+  private canRecord(): boolean {
+    return this.state.stage === "screening" || (this.state.stage === "closing" && this.state.consentToProceed === true);
+  }
+
+  /** A correction can reopen a finished screening; otherwise it stays closed. */
+  private afterStep(step: StepResult): void {
+    this.state.stage = step.screening_complete ? "closing" : "screening";
+  }
+
   private recordAnswer(questionId: string, value: unknown, verbatim: string | undefined): ToolOutcome {
-    if (this.state.stage !== "screening") {
+    if (!this.canRecord()) {
       return { payload: { ok: false, error: "Screening has not started. Confirm identity and consent first." }, isError: true };
     }
     const step = this.state.recordAnswer(questionId, value, verbatim);
     if (!step.ok) return { payload: { ok: false, error: step.message, next_question: step.next_question }, isError: true };
-    if (step.screening_complete) this.state.stage = "closing";
+    this.afterStep(step);
     return { payload: this.withProgress(step) };
   }
 
   private skipQuestion(questionId: string, reason: string): ToolOutcome {
-    if (this.state.stage !== "screening") {
+    if (!this.canRecord()) {
       return { payload: { ok: false, error: "Screening has not started." }, isError: true };
     }
     const step = this.state.skipQuestion(questionId, reason);
     if (!step.ok) return { payload: { ok: false, error: step.message }, isError: true };
-    if (step.screening_complete) this.state.stage = "closing";
+    this.afterStep(step);
     return { payload: this.withProgress(step) };
   }
 

@@ -6,8 +6,8 @@ import { escapeHtml } from "../local/page.js";
  * per call, the transcript alongside measured stats and the AI analysis.
  * All transcript text is untrusted and goes through esc() before rendering.
  */
-export function adminPageHtml(opts: { studyName: string; persona: string; model: string }): string {
-  const cfg = JSON.stringify({ persona: opts.persona, model: opts.model }).replace(/</g, "\\u003c");
+export function adminPageHtml(opts: { studyName: string; persona: string; model: string; localEnabled?: boolean }): string {
+  const cfg = JSON.stringify({ persona: opts.persona, model: opts.model, localEnabled: Boolean(opts.localEnabled) }).replace(/</g, "\\u003c");
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -15,35 +15,19 @@ export function adminPageHtml(opts: { studyName: string; persona: string; model:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Screener Call Analytics</title>
 <style>
+  /* Same palette as the laptop page (/local): warm off-white, white cards, teal-green accent. */
   :root {
     color-scheme: light;
-    --page: #f9f9f7; --surface: #fcfcfb; --raised: #ffffff; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
-    --grid: #e1e0d9; --axis: #c3c2b7; --line: rgba(11,11,11,0.10); --hover: rgba(11,11,11,0.04); --sel: rgba(42,120,214,0.10);
-    --s1: #2a78d6; --s1-soft: #86b6ef; --pos: #2a78d6; --neg: #e34948; --mid: #b9b8b1;
-    --good: #0ca30c; --good-ink: #006300; --warning: #fab219; --warning-ink: #8a5a00; --serious: #ec835a; --serious-ink: #a4461f; --critical: #d03b3b; --critical-ink: #b42323;
-    --bot-bubble: #eef4fc; --person-bubble: #ffffff; --tool: #f3f2ee;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      color-scheme: dark;
-      --page: #0d0d0d; --surface: #1a1a19; --raised: #20201f; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
-      --grid: #2c2c2a; --axis: #383835; --line: rgba(255,255,255,0.10); --hover: rgba(255,255,255,0.05); --sel: rgba(57,135,229,0.18);
-      --s1: #3987e5; --s1-soft: #1c5cab; --pos: #3987e5; --neg: #e66767; --mid: #5d5d58;
-      --good-ink: #0ca30c; --warning-ink: #fab219; --serious-ink: #ec835a; --critical-ink: #e66767;
-      --bot-bubble: #1a2a3f; --person-bubble: #262625; --tool: #262625;
-    }
-  }
-  :root[data-theme="dark"] {
-    color-scheme: dark;
-    --page: #0d0d0d; --surface: #1a1a19; --raised: #20201f; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
-    --grid: #2c2c2a; --axis: #383835; --line: rgba(255,255,255,0.10); --hover: rgba(255,255,255,0.05); --sel: rgba(57,135,229,0.18);
-    --s1: #3987e5; --s1-soft: #1c5cab; --pos: #3987e5; --neg: #e66767; --mid: #5d5d58;
-    --good-ink: #0ca30c; --warning-ink: #fab219; --serious-ink: #ec835a; --critical-ink: #e66767;
-    --bot-bubble: #1a2a3f; --person-bubble: #262625; --tool: #262625;
+    --page: #f6f5f1; --surface: #ffffff; --raised: #ffffff; --ink: #1d1c19; --ink-2: #4b4943; --muted: #6f6c64;
+    --grid: #ecebe6; --axis: #d3cfc4; --line: #e6e2d8; --hover: rgba(29,28,25,0.04); --sel: rgba(15,118,110,0.10);
+    --s1: #0f766e; --s1-soft: #8fcfc7; --pos: #0f766e; --neg: #dc2626; --mid: #b8b4a8;
+    --good: #16a34a; --good-ink: #166534; --good-bg: #dcfce7; --warning: #f59e0b; --warning-ink: #92400e; --warning-bg: #fef3c7;
+    --serious: #ea580c; --serious-ink: #9a3412; --serious-bg: #ffedd5; --critical: #dc2626; --critical-ink: #991b1b; --critical-bg: #fee2e2;
+    --neutral-bg: #ecebe6; --bot-bubble: #e7f3f1; --person-bubble: #ffffff; --tool: #f3f1ec;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
-  body { background: var(--page); color: var(--ink); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { background: var(--page); color: var(--ink); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
   button { font: inherit; color: inherit; }
   a { color: var(--s1); }
   .app { display: grid; grid-template-columns: 300px 1fr; grid-template-rows: auto 1fr; height: 100vh; }
@@ -51,7 +35,10 @@ export function adminPageHtml(opts: { studyName: string; persona: string; model:
   header h1 { font-size: 16px; margin: 0; font-weight: 650; }
   header .study { color: var(--muted); font-size: 13px; }
   header .spacer { flex: 1; }
-  .btn { padding: 6px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); cursor: pointer; font-size: 13px; }
+  a.btn { color: var(--ink); text-decoration: none; }
+  header { flex-wrap: wrap; row-gap: 8px; }
+  header h1, header .btn, header .tag { white-space: nowrap; }
+  .btn { padding: 7px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--raised); cursor: pointer; font-size: 13px; }
   .btn:hover { background: var(--hover); }
   .btn.primary { background: var(--s1); border-color: var(--s1); color: #fff; }
   .btn.primary:hover { filter: brightness(1.08); }
@@ -62,7 +49,7 @@ export function adminPageHtml(opts: { studyName: string; persona: string; model:
   .menu-list { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; min-width: 190px; padding: 4px; background: var(--raised); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.14); }
   .menu-list a { display: block; padding: 6px 10px; border-radius: 6px; color: var(--ink); text-decoration: none; font-size: 13px; }
   .menu-list a:hover { background: var(--hover); }
-  .tag { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; white-space: nowrap; }
+  .tag { font-size: 12px; color: var(--muted); background: var(--neutral-bg); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
 
   nav.rail { border-right: 1px solid var(--line); background: var(--surface); overflow-y: auto; }
   .rail-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 8px; }
@@ -79,14 +66,14 @@ export function adminPageHtml(opts: { studyName: string; persona: string; model:
   .ci-line { color: var(--muted); font-size: 12px; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   main { overflow-y: auto; padding: 20px 24px 60px; }
-  .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-2); background: var(--raised); white-space: nowrap; }
-  .chip .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  .chip.good { color: var(--good-ink); } .chip.good .dot { background: var(--good); }
-  .chip.warning { color: var(--warning-ink); } .chip.warning .dot { background: var(--warning); }
-  .chip.serious { color: var(--serious-ink); } .chip.serious .dot { background: var(--serious); }
-  .chip.critical { color: var(--critical-ink); } .chip.critical .dot { background: var(--critical); }
-  .chip.neutral .dot { background: var(--mid); }
-  .chip.pos .dot { background: var(--pos); } .chip.neg .dot { background: var(--neg); } .chip.mid .dot { background: var(--mid); }
+  /* Filled pills, like the state pill on the laptop page. */
+  .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 2px 10px; border-radius: 999px; color: var(--muted); background: var(--neutral-bg); white-space: nowrap; }
+  .chip .dot { display: none; }
+  .chip.good { color: var(--good-ink); background: var(--good-bg); }
+  .chip.warning { color: var(--warning-ink); background: var(--warning-bg); }
+  .chip.serious { color: var(--serious-ink); background: var(--serious-bg); }
+  .chip.critical, .chip.neg { color: var(--critical-ink); background: var(--critical-bg); }
+  .chip.pos { color: var(--s1); background: var(--sel); }
   .spin { width: 10px; height: 10px; border: 2px solid var(--line); border-top-color: var(--s1); border-radius: 50%; animation: spin 0.9s linear infinite; display: inline-block; }
   @keyframes spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
@@ -198,6 +185,7 @@ export function adminPageHtml(opts: { studyName: string; persona: string; model:
     <h1>Call analytics</h1>
     <span class="study">${escapeHtml(opts.studyName)}</span>
     <span class="spacer"></span>
+    ${opts.localEnabled ? '<a class="btn" href="/local">Voice test</a>' : ""}
     <span class="tag" title="Model used for analysis">${escapeHtml(opts.model)}</span>
     <details class="menu" id="download">
       <summary class="btn">Download results</summary>
@@ -341,7 +329,7 @@ function barRows(rows, max, opts = {}) {
 function renderOverview() {
   const o = state.overview;
   if (state.route.view !== "overview" || !o) return;
-  if (!o.calls) { $("#main").innerHTML = '<div class="empty">No calls yet. Make a call from the laptop page at <a href="/local">/local</a> and it will show up here with its analysis.</div>'; return; }
+  if (!o.calls) { $("#main").innerHTML = '<div class="empty">No calls yet.' + (CFG.localEnabled ? ' Make a call from the <a href="/local">voice test page</a> and it will show up here with its analysis.' : " Calls show up here with their analysis once they are made.") + "</div>"; return; }
   const completed = o.outcomes.completed || 0;
   const pending = state.calls.filter((c) => c.analysisStatus === "none" || c.analysisStatus === "stale").length;
   const tiles = [

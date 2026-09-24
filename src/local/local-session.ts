@@ -5,9 +5,8 @@ import type { Logger } from "../logger.js";
 import type { Questionnaire } from "../screening/schema.js";
 import type { CallRecord } from "../storage/csv.js";
 import { connectFlux, type FluxEvents, type FluxOptions, type FluxTurnEvent, type SttStream } from "./deepgram-flux.js";
-import { ElevenLabsTurn, type ElevenLabsTurnEvents, type ElevenLabsTurnOptions } from "./elevenlabs-tts.js";
 import { SentenceChunker } from "./sentences.js";
-import type { ElevenLabsVoiceSpec } from "./voice-spec.js";
+import { createTtsTurn, type TtsConfig, type TtsTurn, type TtsTurnEvents } from "./tts.js";
 import type { CallStore } from "../storage/store.js";
 
 /** The browser side of the local test, abstracted so tests can observe it. */
@@ -17,22 +16,12 @@ export interface BrowserLink {
   close(): void;
 }
 
-/** The subset of ElevenLabsTurn the session relies on (tests provide fakes). */
-export interface TtsTurn {
-  sendText(text: string): void;
-  end(): void;
-  abort(): void;
-  heardText(playedMs: number): string;
-  readonly deliveredMs: number;
-}
-
 export interface LocalVoiceDeps {
   questionnaire: Questionnaire;
   llm: LlmAdapter;
   log: Logger;
   deepgramApiKey: string;
-  elevenLabsApiKey: string;
-  voice: ElevenLabsVoiceSpec;
+  tts: TtsConfig;
   sampleRate: number;
   eotThreshold: number;
   eagerEotThreshold?: number;
@@ -41,7 +30,7 @@ export interface LocalVoiceDeps {
   recordingEnabled?: boolean;
   /** Test seams. */
   sttFactory?: (opts: FluxOptions, events: FluxEvents) => Promise<SttStream>;
-  ttsFactory?: (opts: ElevenLabsTurnOptions, events: ElevenLabsTurnEvents) => TtsTurn;
+  ttsFactory?: (cfg: TtsConfig, events: TtsTurnEvents) => TtsTurn;
   onFinished?(record: CallRecord): void;
 }
 
@@ -72,7 +61,7 @@ export function isBackchannel(transcript: string): boolean {
   return words.every((w) => BACKCHANNEL_WORD.test(w));
 }
 
-/** Proportional fallback when no alignment data is available. */
+/** Proportional fallback when the speech provider gave no word timing. */
 export function proportionalHeard(text: string, playedMs: number, totalMs: number): string {
   if (totalMs <= 0 || playedMs <= 0) return "";
   if (playedMs >= totalMs) return text.trim();
@@ -84,7 +73,7 @@ export function proportionalHeard(text: string, playedMs: number, totalMs: numbe
 
 /**
  * One laptop conversation: microphone audio → Flux turn events → the same
- * CallSession the phone path uses → ElevenLabs speech → browser playback.
+ * CallSession the phone path uses → Cartesia (or ElevenLabs) speech → browser playback.
  * Owns barge-in: a real interruption clears playback and tells the model
  * what was heard; a short "uh-huh" while Sam is talking is ignored.
  */
@@ -252,8 +241,7 @@ export class LocalVoiceSession {
   }
 
   private createTts(turnId: number): TtsTurn {
-    const opts: ElevenLabsTurnOptions = { apiKey: this.deps.elevenLabsApiKey, voice: this.deps.voice, sampleRate: this.deps.sampleRate as ElevenLabsTurnOptions["sampleRate"], log: this.deps.log };
-    const events: ElevenLabsTurnEvents = {
+    const events: TtsTurnEvents = {
       onAudio: (chunk) => {
         const turn = this.current;
         if (!turn || turn.id !== turnId || turn.aborted) return;
@@ -285,7 +273,8 @@ export class LocalVoiceSession {
         }
       },
     };
-    return (this.deps.ttsFactory ?? ((o, ev) => new ElevenLabsTurn(o, ev)))(opts, events);
+    if (this.deps.ttsFactory) return this.deps.ttsFactory(this.deps.tts, events);
+    return createTtsTurn(this.deps.tts, this.deps.sampleRate, this.deps.log, events);
   }
 
   // ---- speech out ------------------------------------------------------

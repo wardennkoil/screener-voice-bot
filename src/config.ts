@@ -23,8 +23,14 @@ const EnvSchema = z.object({
   GEMINI_THINKING_LEVEL: z.enum(["low", "medium", "high"]).default("low"),
 
   DEEPGRAM_API_KEY: z.string().min(1).optional(),
+  /** Voice for the laptop page (/local); unset picks Cartesia when its key is set, else ElevenLabs. Phone calls always speak through Twilio with ELEVENLABS_VOICE. */
+  TTS_PROVIDER: z.enum(["cartesia", "elevenlabs"]).optional(),
+  CARTESIA_API_KEY: z.string().min(1).optional(),
+  /** Katie: US English, female, Cartesia's recommended voice for agents. */
+  CARTESIA_VOICE_ID: z.string().min(1).default("f786b574-daa5-4673-aa0c-cbe3e8534c02"),
+  CARTESIA_MODEL_ID: z.string().min(1).default("sonic-3.6"),
   ELEVENLABS_API_KEY: z.string().min(1).optional(),
-  /** Overrides the voice id parsed from ELEVENLABS_VOICE for the laptop voice mode. */
+  /** Overrides the voice id parsed from ELEVENLABS_VOICE for the laptop voice mode (TTS_PROVIDER=elevenlabs). */
   ELEVENLABS_VOICE_ID: z.string().min(1).optional(),
   ELEVENLABS_MODEL_ID: z.string().min(1).optional(),
   LOCAL_OUTPUT_CSV: z.string().default("data/local_results.csv"),

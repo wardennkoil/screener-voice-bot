@@ -26,12 +26,12 @@ services:
         sync: false
       - key: DEEPGRAM_API_KEY
         sync: false
-      - key: ELEVENLABS_API_KEY
+      - key: CARTESIA_API_KEY
         sync: false
-      # Leave empty to use the default voice (Juniper needs a paid ElevenLabs plan; Sarah is EXAVITQu4vr4xnSDxMaL).
-      - key: ELEVENLABS_VOICE_ID
+      # Leave empty for the default voice (Katie).
+      - key: CARTESIA_VOICE_ID
         sync: false
-      - key: ELEVENLABS_MODEL_ID
-        value: eleven_turbo_v2_5
+      - key: CARTESIA_MODEL_ID
+        value: sonic-3.6
       - key: OPENROUTER_MODEL
         value: openai/gpt-5.6-luna

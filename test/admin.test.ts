@@ -1,3 +1,4 @@
+import { adminPageHtml } from "../src/admin/page.js";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -49,6 +50,12 @@ describe("admin panel", () => {
     cleanup.push(() => s.app.close(), () => rm(s.dir, { recursive: true, force: true }));
     return s;
   };
+
+  it("links to the voice test page only when it is running", async () => {
+    const { app } = await make();
+    expect((await app.inject({ url: "/admin" })).body).not.toContain('href="/local">Voice test');
+    expect(adminPageHtml({ studyName: "S", persona: "Maria", model: "m", localEnabled: true })).toContain('href="/local">Voice test');
+  });
 
   it("without a token, answers localhost only and refuses tunneled requests", async () => {
     const { app } = await make();

@@ -46,7 +46,9 @@ const FIXED_TAIL = ["callback_when", "notes", "transcript_path", "recording_sid"
 export function csvColumns(q: Questionnaire): string[] {
   const questionIds = flattenQuestions(q).map((x) => x.id);
   const verbatimCols = q.settings.store_verbatim ? questionIds.map((id) => `${id}__verbatim`) : [];
-  return [...FIXED_HEAD, ...questionIds, ...verbatimCols, ...FIXED_TAIL];
+  // A computed BMI sits right after the weight answer it comes from.
+  const answerCols = q.bmi ? questionIds.flatMap((id) => (id === q.bmi!.weight_question ? [id, "bmi"] : [id])) : questionIds;
+  return [...FIXED_HEAD, ...answerCols, ...verbatimCols, ...FIXED_TAIL];
 }
 
 export function recordToRow(q: Questionnaire, r: CallRecord): string[] {

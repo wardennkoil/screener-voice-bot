@@ -10,20 +10,34 @@ import { FileCallStore } from "../storage/file-store.js";
 /** Simulated participants: a second model plays a person with a persona. */
 export const PERSONAS: Record<string, { profile: string; expect: Partial<Pick<CallRecord, "outcome" | "eligible">> }> = {
   eligible: {
-    profile: "You are Jordan, 42, diagnosed with insomnia two years ago, not on sleep medication, not pregnant, can attend visits, never smoked, best reached in the evenings. Cooperative and brief.",
+    profile:
+      "You are Jordan, 38. This morning you filled out a website form about a weight management study. You are five foot five and 205 pounds, and your weight has been steady for months. You have high blood pressure and take amlodipine. No diabetes or prediabetes, no weight-loss medication or supplements, no weight-loss surgery, never had pancreatitis, no thyroid cancer in the family. Not pregnant or planning to be; you have an IUD. Not in another study. You work from home, so the visits are fine, and you pick the Tuesday slot. The placebo does not put you off. Cooperative and brief.",
     expect: { outcome: "completed", eligible: "yes" },
   },
   ineligible: {
-    profile: "You are Jordan, 71, you have insomnia, you take zolpidem nightly, not pregnant, can attend visits, former smoker. Polite and a little chatty.",
+    profile:
+      "You are Jordan, 45, and you filled out the weight study form. Five foot eight, 240 pounds, weight steady. No high blood pressure, no diabetes. Your doctor started you on Ozempic last month. Everything else is a no. Polite and a little chatty.",
     expect: { outcome: "completed", eligible: "no" },
   },
+  bmi_borderline: {
+    profile:
+      "You are Jordan, 50, and you filled out the weight study form. Five foot six, 170 pounds, weight steady. You have high blood pressure and take ramipril. Your doctor once said you have prediabetes. No weight-loss medication, no surgery, no pancreatitis, no thyroid cancer in the family, not pregnant, not in another study. The visits are fine, but neither offered time works; Friday mornings are best for you.",
+    expect: { outcome: "completed", eligible: "yes" },
+  },
   chatty: {
-    profile: "You are Jordan, 35, insomnia since your kids were born, no medication, not pregnant, can attend visits, never smoked. You tell little stories with every answer and sometimes ask the caller questions back.",
+    profile:
+      "You are Jordan, 34, and you filled out the weight study form. You tell little stories with every answer and sometimes ask the caller questions back, like whether you get paid. Five foot four, 190 pounds, steady. No high blood pressure, no diabetes, none of the other conditions or medications, not pregnant, not in another study, visits are fine, you pick Thursday.",
     expect: { outcome: "completed", eligible: "yes" },
   },
   confused: {
-    profile: "You are Jordan, 58, hard of hearing; you often say 'sorry, what?' the first time and need questions repeated more simply. Insomnia yes, no medication, not pregnant, can attend, current smoker.",
+    profile:
+      "You are Jordan, 61, hard of hearing; you often say 'sorry, what?' the first time and need questions repeated more simply. You filled out the weight study form. Five foot ten, 250 pounds, steady. High blood pressure, no medication for it. No diabetes, none of the other conditions or medications, not pregnant, not in another study, visits are fine, Tuesday works.",
     expect: { outcome: "completed", eligible: "yes" },
+  },
+  placebo_no: {
+    profile:
+      "You are Jordan, 42, and you filled out the weight study form. You have time and agree to the questions, but once you hear there is a one in three chance of placebo for a year and a half, you say that's not for you and you're no longer interested.",
+    expect: { outcome: "completed", eligible: "no" },
   },
   declines: {
     profile: "You are Jordan. You are busy and not interested. You politely decline within the first two turns and want to hang up.",
@@ -34,7 +48,7 @@ export const PERSONAS: Record<string, { profile: string; expect: Partial<Pick<Ca
     expect: { outcome: "callback_requested" },
   },
   wrong_person: {
-    profile: "You are Sam's neighbor Alex. Jordan does not live here; this is a wrong number. Be brief.",
+    profile: "You are Alex. Nobody named Jordan lives here; this is a wrong number. Be brief.",
     expect: { outcome: "wrong_person" },
   },
 };

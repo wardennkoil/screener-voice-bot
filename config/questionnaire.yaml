@@ -2,73 +2,141 @@
 #
 # "ask" lines are guidance for the conversational model, not scripts: it will phrase
 # each question naturally, acknowledge answers, and rephrase if the person is confused.
-# Eligibility is decided by the server from the eligible_if rules, never by the model.
+# Eligibility is decided by the server from the eligible_if rules (and the bmi block),
+# never by the model. With stop_on_disqualify the call wraps up politely as soon as an
+# answer rules the person out.
 
 study:
-  name: "the Restful Nights sleep study"
-  organization: "the Meridian Sleep Research Center"
-  description_short: "a research study looking at a new non-drug approach to help adults with insomnia sleep better"
+  name: "the weight management research study"
+  organization: "LMC Healthcare in Scarborough"
+  description_short: "a placebo-controlled research study of an investigational once-a-day tablet for weight management"
+  # TODO: replace with the clinic's real number, written the way it should be spoken.
   callback_number_spoken: "five five five, zero one zero, two thousand"
-  next_steps_if_eligible: "someone from the study team will call within two business days to schedule a first visit"
+  form_source: "a form on our website"
+  call_length_spoken: "about ten minutes"
+  consent_script: "I'll tell you a bit about the study, then go over a few of your answers to make sure we have them right. Everything you share stays confidential, and you can skip any question."
+  briefing: >-
+    The study is testing an investigational tablet called elecoglipron. It's in the same family as
+    medications like Wegovy, but it's a pill taken once a day instead of an injection. It isn't approved
+    yet, so it's only available through research. It's placebo-controlled: for the first eighteen months
+    there's a two in three chance of getting the study drug and a one in three chance of placebo, and
+    neither the participant nor the doctor knows which. After that, everyone is reassigned for another
+    year, and anyone who was on placebo switches to the study drug. The placebo is how the study measures
+    whether the drug actually works.
+  next_steps_if_eligible: >-
+    their screening visit is booked (or, if none of the offered times worked, the study team will call
+    to set one up); the visit can take up to four hours, so they should bring their health card and a list
+    of their medications or the bottles; and the study team will email them a copy of the consent form
+    today so they can read it ahead of time
+  facts:
+    - "Participants receive a stipend for each visit they complete, starting at one hundred and twenty dollars, and more for the longer fasting visits. The study doctor goes through the details at the screening visit."
+    - "The study medication and the study tests are at no cost."
+    - "The study runs up to about two and a half years, with around twenty-two visits at the clinic in Scarborough. Visits start every four weeks and then spread out. Most take about two hours, and a few need overnight fasting."
+    - "The screening visit is with the study doctor, who goes through the consent form in detail and runs some tests to confirm eligibility. Booking it doesn't commit them to anything."
+    - "Questions about birth control, current medications, or other medical details are answered by the study doctor at the screening visit."
 
 caller:
-  persona_name: "Sam"
-  # false: Sam introduces themselves as "Sam from the study team" without saying the call is automated.
-  # Sam still answers truthfully if asked whether they are a real person. Note that proactive
-  # AI disclosure is legally required for calls into Texas and California (and an FCC rule is pending);
-  # confirm with your ethics board and legal counsel before calling participants with this off.
+  persona_name: "Maria"
+  # false: Maria introduces herself by name without saying the call is automated.
+  # She still answers truthfully if asked whether she is a real person. Check the rules that apply
+  # to automated calls where you call (and with your ethics board) before calling participants with this off.
   ai_disclosure: false
 
 settings:
-  stop_on_disqualify: false          # keep asking after a disqualifying answer (does not reveal the criterion)
+  stop_on_disqualify: true           # end the screening as soon as an answer rules them out
   reveal_reason_when_ineligible: false
-  max_call_minutes: 15
+  max_call_minutes: 20
   store_verbatim: true               # adds <id>__verbatim columns with the person's own words
 
-questions:
-  - id: age
-    type: integer
-    ask: "How old they are"
-    unit: years
-    valid: { min: 16, max: 110 }
-    eligible_if: { min: 18, max: 65 }
+# Qualifies with a BMI of 30 or more, or 27 or more with high blood pressure.
+bmi:
+  height_question: height_inches
+  weight_question: weight_lbs
+  min: 30
+  min_with_condition: 27
+  condition_questions: [high_blood_pressure]
 
-  - id: diagnosed_insomnia
+questions:
+  - id: still_interested
     type: yes_no
-    ask: "Whether a doctor has ever told them they have insomnia, or they have had trouble falling or staying asleep for three months or more"
+    ask: "Right after the study explanation: whether they are still interested now that they know they might get a placebo for the first eighteen months (for example, 'Does that change your interest?'). Record true if they still want to go ahead"
     eligible_if: { equals: true }
 
-  - id: sleep_medication
+  - id: height_inches
+    type: number
+    unit: inches
+    ask: "Their height. Say you'd like to double-check a few answers from their form, and ask for their height on its own; weight is the next question. Convert to inches for the record (five foot five is 65, centimetres divided by 2.54), but acknowledge it the way they said it, never in inches"
+    valid: { min: 48, max: 84 }
+
+  - id: weight_lbs
+    type: number
+    unit: pounds
+    ask: "Their current weight. Convert kilograms to pounds (times 2.2)"
+    valid: { min: 70, max: 700 }
+
+  - id: weight_change_3mo
     type: yes_no
-    ask: "Whether they currently take any prescription medication to help them sleep"
+    ask: "Whether their weight has changed by more than about ten pounds, up or down, in the last three months"
     eligible_if: { equals: false }
+
+  - id: high_blood_pressure
+    type: yes_no
+    ask: "Whether they have high blood pressure"
     follow_up_if:
       when: { equals: true }
       question:
-        id: sleep_medication_name
+        id: bp_medication
         type: free_text
-        ask: "Which medication, only if they are comfortable sharing"
+        ask: "Whether they take medication for it, and which one if they're comfortable sharing"
         required: false
 
-  - id: pregnant_or_nursing
+  - id: diabetes
+    type: single_choice
+    ask: "Whether they have ever been told they have diabetes or prediabetes"
+    options: ["no", "prediabetes", "diabetes"]
+    eligible_if: { in: ["no", "prediabetes"] }
+
+  - id: weight_loss_meds_3mo
     type: yes_no
-    ask: "Whether they are currently pregnant or breastfeeding; ask everyone the same neutral way, it is a standard study question"
+    ask: "Whether in the last three months they have taken anything for weight loss, like Ozempic, Wegovy, Mounjaro or Saxenda, or any weight-loss supplements"
+    eligible_if: { equals: false }
+
+  - id: weight_loss_surgery
+    type: yes_no
+    ask: "Whether they have ever had weight-loss surgery, or have one planned"
+    eligible_if: { equals: false }
+
+  - id: pancreatitis_or_mtc
+    type: yes_no
+    ask: "Whether they have ever had pancreatitis, or anyone in their family has had a type of thyroid cancer called medullary thyroid cancer. Record true if either applies"
+    eligible_if: { equals: false }
+
+  - id: pregnancy
+    type: yes_no
+    ask: "Whether they are pregnant, breastfeeding, or planning a pregnancy in the next two and a half years; ask everyone the same neutral way, it is a standard study question"
     sensitive: true
+    eligible_if: { equals: false }
+
+  - id: other_study
+    type: yes_no
+    ask: "Whether they are taking part in any other research study right now"
     eligible_if: { equals: false }
 
   - id: can_attend_visits
     type: yes_no
-    ask: "Whether they could come to the center in downtown Springfield for three visits over six weeks, each about an hour"
+    ask: "Whether the visit schedule would work for them: the study runs up to about two and a half years, with around twenty-two visits at the clinic in Scarborough, every four weeks at first and then spread out; most visits take about two hours and a few need overnight fasting"
     eligible_if: { equals: true }
 
-  - id: smoker
+  # Update these slots as they change; keep "none of these" as the last option.
+  - id: screening_visit
     type: single_choice
-    ask: "Whether they smoke: never, used to, or currently"
-    options: [never, former, current]
-
-  - id: best_contact_time
-    type: free_text
-    ask: "When is generally a good time for the study team to reach them by phone, if they qualify"
-    required: false
+    ask: "Offer the screening visit: it's with the study doctor, who goes through the consent form in detail and runs some tests to confirm, and booking it doesn't commit them to anything. Offer the listed times (not 'none of these') and record the one they pick, or 'none of these' if neither works"
+    options: ["Tuesday October 6 at 8:30 AM", "Thursday October 8 at 9:00 AM", "none of these"]
+    follow_up_if:
+      when: { equals: "none of these" }
+      question:
+        id: visit_availability
+        type: free_text
+        ask: "When they are generally available for a morning visit of up to four hours, so the study team can call to book it"
 
 eligibility: all_rules

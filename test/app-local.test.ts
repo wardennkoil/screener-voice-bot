@@ -3,8 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import type { LlmAdapter } from "../src/conversation/llm.js";
 import type { FluxEvents, SttStream } from "../src/local/deepgram-flux.js";
-import type { ElevenLabsTurnEvents } from "../src/local/elevenlabs-tts.js";
-import type { TtsTurn } from "../src/local/local-session.js";
+import type { TtsTurn, TtsTurnEvents } from "../src/local/tts.js";
 import { sampleQuestionnaire } from "./helpers.js";
 import { FileCallStore } from "../src/storage/file-store.js";
 
@@ -15,7 +14,7 @@ describe("laptop voice mode over the app", () => {
   let app: Awaited<ReturnType<typeof buildApp>>;
   let flux: FluxEvents | undefined;
   const mic: Buffer[] = [];
-  let ttsEvents: ElevenLabsTurnEvents | undefined;
+  let ttsEvents: TtsTurnEvents | undefined;
   const llm: LlmAdapter = {
     async run(_p, h) {
       h.onText("Hi, is this Jordan? ");
@@ -34,8 +33,7 @@ describe("laptop voice mode over the app", () => {
       log: pino({ level: "silent" }),
       local: {
         deepgramApiKey: "dg",
-        elevenLabsApiKey: "el",
-        voice: { voiceId: "V", modelId: "eleven_flash_v2_5" },
+        tts: { provider: "cartesia", apiKey: "ca", voiceId: "V", modelId: "sonic-3.6" },
         sampleRate: 24000,
         eotThreshold: 0.7,
         sttFactory: async (_o, events): Promise<SttStream> => {
@@ -57,6 +55,7 @@ describe("laptop voice mode over the app", () => {
     expect(page.statusCode).toBe(200);
     expect(page.body).toContain("Start call");
     expect(page.body).toContain("Restful Nights");
+    expect(page.body).toContain('href="/admin"');
     const twiml = await app.inject({ method: "POST", url: "/twiml/screener" });
     expect(twiml.statusCode).toBe(404);
   });

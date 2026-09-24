@@ -49,6 +49,29 @@ export function isApplicable(q: FlatQuestion, answers: ReadonlyMap<string, Answe
   return ruleMatches(q.parentRule, answers.get(q.parentId));
 }
 
+/** Body mass index from the configured height (inches) and weight (pounds) answers, to one decimal; undefined until both are known. */
+export function computeBmi(questionnaire: Questionnaire, answers: ReadonlyMap<string, AnswerValue>): number | undefined {
+  const cfg = questionnaire.bmi;
+  if (!cfg) return undefined;
+  const inches = answers.get(cfg.height_question);
+  const pounds = answers.get(cfg.weight_question);
+  if (typeof inches !== "number" || typeof pounds !== "number" || inches <= 0) return undefined;
+  return Math.round(((703 * pounds) / (inches * inches)) * 10) / 10;
+}
+
+/** "pass", "fail", or "missing" (not decidable yet: a height/weight or condition answer is still to come). */
+function bmiVerdict(questionnaire: Questionnaire, answers: ReadonlyMap<string, AnswerValue>): "pass" | "fail" | "missing" {
+  const cfg = questionnaire.bmi!;
+  const bmi = computeBmi(questionnaire, answers);
+  if (bmi === undefined) return "missing";
+  if (bmi >= cfg.min) return "pass";
+  if (cfg.min_with_condition === undefined || bmi < cfg.min_with_condition) return "fail";
+  const conditions = cfg.condition_questions.map((id) => answers.get(id));
+  if (conditions.some((v) => v === true)) return "pass";
+  // Only a full set of "no" answers rules them out; otherwise wait for the rest.
+  return conditions.every((v) => v === false) ? "fail" : "missing";
+}
+
 export function evaluateEligibility(
   questionnaire: Questionnaire,
   answers: ReadonlyMap<string, AnswerValue>,
@@ -67,6 +90,11 @@ export function evaluateEligibility(
     if (!ruleMatches(q.eligible_if, value)) failed.push(q.id);
   }
   void skipped;
+  if (questionnaire.bmi) {
+    const verdict = bmiVerdict(questionnaire, answers);
+    if (verdict === "fail") failed.push("bmi");
+    else if (verdict === "missing") missing.push("bmi");
+  }
   if (failed.length > 0) return { status: "ineligible", failed, missing };
   if (missing.length > 0) return { status: "undetermined", failed, missing };
   return { status: "eligible", failed, missing };

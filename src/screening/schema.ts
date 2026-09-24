@@ -99,6 +99,16 @@ export const QuestionnaireSchema = z
       callback_number_spoken: z.string().min(1),
       /** What happens next for eligible people, as a spoken phrase. */
       next_steps_if_eligible: z.string().min(1),
+      /** Where the person applied, e.g. "a form on our website"; mentioned when saying why you are calling. */
+      form_source: z.string().min(1).optional(),
+      /** How long the call takes, as spoken when asking if now is a good time (default "about five minutes"). */
+      call_length_spoken: z.string().min(1).optional(),
+      /** Said after the time check and before the questions; the person's okay to it is their consent. */
+      consent_script: z.string().min(1).optional(),
+      /** The study explanation given right after consent, before the first question. */
+      briefing: z.string().min(1).optional(),
+      /** Facts the caller may use to answer questions (pay, costs, visits). Anything else goes to the study team. */
+      facts: z.array(z.string().min(1)).default([]),
     }),
     caller: z.strictObject({
       persona_name: z.string().min(1),
@@ -107,7 +117,7 @@ export const QuestionnaireSchema = z
     }),
     settings: z
       .strictObject({
-        /** Stop asking once an answer rules the person out (reveals the criterion; default false). */
+        /** End the screening as soon as an answer rules the person out; the caller closes without naming the answer. */
         stop_on_disqualify: z.boolean().default(false),
         /** Tell an ineligible person which answer ruled them out (default false). */
         reveal_reason_when_ineligible: z.boolean().default(false),
@@ -118,6 +128,19 @@ export const QuestionnaireSchema = z
       })
       .default({ stop_on_disqualify: false, reveal_reason_when_ineligible: false, max_call_minutes: 15, store_verbatim: true }),
     questions: z.array(QuestionSchema).min(1),
+    /**
+     * Body mass index from two answers (inches and pounds). Qualifies at `min` or above, or at
+     * `min_with_condition` or above when any of `condition_questions` was answered yes.
+     */
+    bmi: z
+      .strictObject({
+        height_question: QuestionIdSchema,
+        weight_question: QuestionIdSchema,
+        min: z.number().positive(),
+        min_with_condition: z.number().positive().optional(),
+        condition_questions: z.array(QuestionIdSchema).default([]),
+      })
+      .optional(),
     /** Only "all_rules" is supported today: eligible iff every eligible_if rule passes. */
     eligibility: z.literal("all_rules").default("all_rules"),
   })
@@ -127,6 +150,23 @@ export const QuestionnaireSchema = z
     for (const x of all) {
       if (ids.has(x.id)) ctx.addIssue({ code: "custom", message: `duplicate question id "${x.id}"` });
       ids.add(x.id);
+    }
+    if (q.bmi) {
+      const byId = new Map(all.map((x) => [x.id, x]));
+      const numeric = (id: string, what: string) => {
+        const x = byId.get(id);
+        if (!x) ctx.addIssue({ code: "custom", message: `bmi.${what} "${id}" is not a question id` });
+        else if (x.type !== "number" && x.type !== "integer") ctx.addIssue({ code: "custom", message: `bmi.${what} "${id}" must be a number question` });
+      };
+      numeric(q.bmi.height_question, "height_question");
+      numeric(q.bmi.weight_question, "weight_question");
+      for (const id of q.bmi.condition_questions) {
+        const x = byId.get(id);
+        if (!x || x.type !== "yes_no") ctx.addIssue({ code: "custom", message: `bmi.condition_questions "${id}" must be a yes_no question id` });
+      }
+      if (q.bmi.min_with_condition !== undefined && q.bmi.min_with_condition > q.bmi.min) {
+        ctx.addIssue({ code: "custom", message: "bmi.min_with_condition must not be above bmi.min" });
+      }
     }
   });
 export type Questionnaire = z.infer<typeof QuestionnaireSchema>;

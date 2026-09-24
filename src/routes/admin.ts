@@ -13,7 +13,7 @@ export interface AdminDeps {
   service: AnalysisService;
 }
 
-export async function registerAdminRoutes(app: FastifyInstance, deps: AdminDeps & { questionnaire: Questionnaire; accessToken?: string }): Promise<void> {
+export async function registerAdminRoutes(app: FastifyInstance, deps: AdminDeps & { questionnaire: Questionnaire; accessToken?: string; localEnabled?: boolean }): Promise<void> {
   const { store, service, questionnaire } = deps;
 
   const loadBundle = async (sid: string): Promise<CallBundle | undefined> => {
@@ -30,7 +30,7 @@ export async function registerAdminRoutes(app: FastifyInstance, deps: AdminDeps 
 
     scope.get("/admin", async (_req, reply) =>
       reply.type("text/html").header("content-security-policy", "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' data:").send(
-        adminPageHtml({ studyName: questionnaire.study.name, persona: questionnaire.caller.persona_name, model: service.model }),
+        adminPageHtml({ studyName: questionnaire.study.name, persona: questionnaire.caller.persona_name, model: service.model, localEnabled: deps.localEnabled }),
       ),
     );
 
