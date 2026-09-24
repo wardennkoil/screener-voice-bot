@@ -16,7 +16,11 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "22"
-      # Guards /admin and /local. Render generates it; copy it from the Environment tab to log in.
+      # Anyone can open /admin and /local while this is true (test data only). Set it to "false"
+      # before storing real participants' answers; ADMIN_TOKEN then guards both pages.
+      - key: OPEN_ACCESS
+        value: "true"
+      # Only used with OPEN_ACCESS=false. Render generates it; copy it from the Environment tab to log in.
       - key: ADMIN_TOKEN
         generateValue: true
       # Pasted in when you create the Blueprint (never committed).

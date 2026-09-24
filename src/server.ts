@@ -100,6 +100,7 @@ async function main(): Promise<void> {
     recordingEnabled: e.RECORD_CALLS,
     store: storage.calls("phone"),
     accessToken: e.ADMIN_TOKEN,
+    openAccess: e.OPEN_ACCESS,
     log: logger,
     skipSignatureCheck: process.env.SKIP_TWILIO_SIGNATURE_CHECK === "true",
     twilioAccountType,
@@ -130,7 +131,11 @@ async function main(): Promise<void> {
       phone: twilio ? `enabled via ${twilio.publicHost} (account ${twilioAccountType ?? "unknown"})` : "disabled",
       local: local ? `http://localhost:${e.PORT}/local` : "disabled",
       admin: `http://localhost:${e.PORT}/admin`,
-      access: e.ADMIN_TOKEN ? "/admin and /local need ADMIN_TOKEN" : "/admin and /local answer on localhost only",
+      access: e.OPEN_ACCESS
+        ? "/admin and /local are open to anyone (OPEN_ACCESS=true)"
+        : e.ADMIN_TOKEN
+          ? "/admin and /local need ADMIN_TOKEN"
+          : "/admin and /local answer on localhost only",
       analysisModel: `${analysisChoice.provider}:${analysisChoice.model}`,
       voice: local ? `${local.tts.provider} ${voiceIdOf(local.tts)} ${modelIdOf(local.tts)}` : "disabled",
       phoneVoice: `elevenlabs ${e.ELEVENLABS_VOICE}`,

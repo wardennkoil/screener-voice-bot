@@ -14,7 +14,7 @@ import { sampleQuestionnaire } from "./helpers.js";
 const log = pino({ level: "silent" });
 const noLlm: LlmAdapter = { run: async () => ({ steps: [], toolCalls: [], text: "", aborted: false }) };
 
-async function setup(token?: string) {
+async function setup(token?: string, openAccess = false) {
   const dir = await mkdtemp(join(tmpdir(), "admin-"));
   const calls = join(dir, "calls");
   const analysis = join(dir, "analysis");
@@ -33,6 +33,7 @@ async function setup(token?: string) {
     recordingEnabled: false,
     store: new FileCallStore(undefined, calls),
     accessToken: token,
+    openAccess,
     log,
     admin: { store, service },
   });
@@ -45,11 +46,20 @@ describe("admin panel", () => {
     await Promise.all(cleanup.map((f) => f()));
     cleanup = [];
   });
-  const make = async (token?: string) => {
-    const s = await setup(token);
+  const make = async (token?: string, openAccess = false) => {
+    const s = await setup(token, openAccess);
     cleanup.push(() => s.app.close(), () => rm(s.dir, { recursive: true, force: true }));
     return s;
   };
+
+  it("with OPEN_ACCESS, answers anyone (even with a token set) but still refuses cross-origin writes", async () => {
+    const { app } = await make("a-long-admin-token", true);
+    const remote = { "x-forwarded-for": "1.2.3.4", host: "screener.onrender.com" };
+    expect((await app.inject({ url: "/admin", headers: remote })).statusCode).toBe(200);
+    expect((await app.inject({ url: "/admin/api/calls", headers: remote })).statusCode).toBe(200);
+    const cross = await app.inject({ method: "POST", url: "/admin/api/analyze-pending", headers: { ...remote, origin: "https://evil.example" } });
+    expect(cross.statusCode).toBe(403);
+  });
 
   it("links to the voice test page only when it is running", async () => {
     const { app } = await make();

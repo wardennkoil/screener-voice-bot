@@ -22,6 +22,8 @@ export interface LocalRouteDeps {
   recordingEnabled: boolean;
   /** ADMIN_TOKEN: the page spends API credits, so it is guarded like the admin panel. */
   accessToken?: string;
+  /** OPEN_ACCESS: anyone may use the page, token or not. */
+  openAccess?: boolean;
   /** Called once a finished call's transcript is on disk (queues its analysis). */
   onCallSaved?(callSid: string): void;
   /** Test seams passed through to the session. */
@@ -32,7 +34,7 @@ export interface LocalRouteDeps {
 /** Laptop test mode: a page at /local and a WebSocket at /local-ws carrying mic audio in and speech out. */
 export async function registerLocalRoutes(app: FastifyInstance, deps: LocalRouteDeps): Promise<void> {
   await app.register(async (scope) => {
-    guardScope(scope, deps.accessToken, ["/local"]);
+    guardScope(scope, deps.accessToken, ["/local"], deps.openAccess);
     registerGuardedLocalRoutes(scope, deps);
   });
 }

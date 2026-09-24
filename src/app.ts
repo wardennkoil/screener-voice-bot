@@ -48,7 +48,7 @@ export interface AppDeps {
   twilio?: TwilioEnv;
   dialer?: DialerLike;
   /** Laptop voice mode; registered when present. */
-  local?: Omit<LocalRouteDeps, "questionnaire" | "llm" | "log" | "recordingEnabled" | "onCallSaved" | "accessToken">;
+  local?: Omit<LocalRouteDeps, "questionnaire" | "llm" | "log" | "recordingEnabled" | "onCallSaved" | "accessToken" | "openAccess">;
   /** Admin panel at /admin with post-call analysis; registered when present. */
   admin?: AdminDeps;
   voice: VoiceSettings;
@@ -57,6 +57,8 @@ export interface AppDeps {
   store: CallStore;
   /** ADMIN_TOKEN, guarding /admin and /local; unset means localhost only. */
   accessToken?: string;
+  /** OPEN_ACCESS: /admin and /local answer anyone, ignoring accessToken. */
+  openAccess?: boolean;
   log: Logger;
   /** Development only: accept Twilio webhooks without a valid signature. */
   skipSignatureCheck?: boolean;
@@ -141,11 +143,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   }
 
   if (deps.local) {
-    await registerLocalRoutes(app, { ...deps.local, questionnaire: deps.questionnaire, llm: deps.llm, log: deps.log, recordingEnabled: deps.recordingEnabled, onCallSaved: deps.onCallSaved, accessToken: deps.accessToken });
+    await registerLocalRoutes(app, { ...deps.local, questionnaire: deps.questionnaire, llm: deps.llm, log: deps.log, recordingEnabled: deps.recordingEnabled, onCallSaved: deps.onCallSaved, accessToken: deps.accessToken, openAccess: deps.openAccess });
   }
 
   if (deps.admin) {
-    await registerAdminRoutes(app, { ...deps.admin, questionnaire: deps.questionnaire, accessToken: deps.accessToken, localEnabled: Boolean(deps.local) });
+    await registerAdminRoutes(app, { ...deps.admin, questionnaire: deps.questionnaire, accessToken: deps.accessToken, openAccess: deps.openAccess, localEnabled: Boolean(deps.local) });
   }
 
   return app;

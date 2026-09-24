@@ -49,6 +49,8 @@ const EnvSchema = z.object({
 
   /** Admin panel at /admin. Required for access from anywhere but localhost. */
   ADMIN_TOKEN: z.string().min(12).optional(),
+  /** /admin and /local answer anyone, with no token (test data only; set false to require ADMIN_TOKEN again). */
+  OPEN_ACCESS: boolFromEnv.default(true),
   /** Model for post-call analysis; defaults to the conversation model. Latency does not matter here, so a stronger model pays off. */
   ANALYSIS_MODEL: z.string().min(1).optional(),
   ANALYSIS_DIR: z.string().default("data/analysis"),

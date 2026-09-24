@@ -63,9 +63,15 @@ function deny(reply: FastifyReply, token: string | undefined): FastifyReply {
 /**
  * Guards every route registered in `scope`. `pages` are the paths where a one-time ?token= login
  * is accepted: it is traded for an HttpOnly cookie covering the whole app, then dropped from the URL.
+ * With `open` (OPEN_ACCESS) anyone may use them; cross-origin writes are still refused.
  */
-export function guardScope(scope: FastifyInstance, token: string | undefined, pages: string[]): void {
+export function guardScope(scope: FastifyInstance, token: string | undefined, pages: string[], open = false): void {
   scope.addHook("onRequest", async (req, reply) => {
+    if (open) {
+      if (req.method !== "GET" && req.method !== "HEAD" && !isSameOrigin(req)) return reply.code(403).type("text/plain").send("Cross-origin request refused.");
+      reply.header("cache-control", "no-store");
+      return;
+    }
     const path = req.url.split("?")[0]!;
     const query = req.query as { token?: unknown } | undefined;
     if (token && req.method === "GET" && pages.includes(path) && typeof query?.token === "string") {

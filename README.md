@@ -94,7 +94,7 @@ Open `http://localhost:3000/admin` while the server runs. It lists every saved c
 
 Each finished call is analyzed automatically in the background. The analyst model receives the bot's actual system prompt as "the plan", so deviations are judged against exactly what the bot was told. Results are cached (in `data/analysis/<call>.json`, or the database) and marked out of date if the transcript changes. Use **Analyze all pending** for calls saved before the panel existed. `ANALYSIS_MODEL` picks a different model for analysis. Latency does not matter there, so a stronger model is a cheap upgrade.
 
-Transcripts contain health answers: without `ADMIN_TOKEN` the panel refuses anything that is not a direct localhost request (including requests through your ngrok tunnel). The laptop page `/local` follows the same rule, since every call on it spends Deepgram, Cartesia and OpenRouter credits. With a token, open `/admin?token=<ADMIN_TOKEN>` (or `/local?token=...`) once; a cookie then keeps you signed in to both. **Download results** in the panel header exports the results CSV for laptop or phone calls.
+**Access:** by default (`OPEN_ACCESS=true`) `/admin` and `/local` are open to anyone who has the address, which is fine while there is only test data. Set `OPEN_ACCESS=false` before real participants' answers are stored; the rules below then apply. Transcripts contain health answers: without `ADMIN_TOKEN` the panel refuses anything that is not a direct localhost request (including requests through your ngrok tunnel). The laptop page `/local` follows the same rule, since every call on it spends Deepgram, Cartesia and OpenRouter credits. With a token, open `/admin?token=<ADMIN_TOKEN>` (or `/local?token=...`) once; a cookie then keeps you signed in to both. **Download results** in the panel header exports the results CSV for laptop or phone calls.
 
 ## Deploy free on Render + Neon
 
@@ -103,7 +103,7 @@ Render's free web service runs the laptop page and the admin panel online. Its d
 1. **Neon** ([neon.com](https://neon.com)): sign up (no card), create a project, and copy the **pooled** connection string (`postgresql://...-pooler...?sslmode=require`).
 2. **Render** ([render.com](https://render.com)): sign up and connect GitHub with access to this repository.
 3. Render → **New → Blueprint** → pick the repository and branch. It reads [`render.yaml`](render.yaml) and asks for the secrets: `DATABASE_URL` (from step 1), `OPENROUTER_API_KEY`, `DEEPGRAM_API_KEY`, `CARTESIA_API_KEY`, and optionally `CARTESIA_VOICE_ID` (leave empty for Katie).
-4. When the deploy is live, copy `ADMIN_TOKEN` from the service's **Environment** tab (Render generated it) and open `https://<your-app>.onrender.com/admin?token=<ADMIN_TOKEN>` once. The laptop page is at `/local`.
+4. When the deploy is live, open `https://<your-app>.onrender.com/admin`; the laptop page is at `/local`. Both are open while `OPEN_ACCESS=true`. With it set to `false`, copy `ADMIN_TOKEN` from the service's **Environment** tab (Render generated it) and open `/admin?token=<ADMIN_TOKEN>` once.
 
 The tables are created on first start. To bring your existing local calls along, run `DATABASE_URL=<neon string> npm run db:import` on your machine: it copies `data/calls`, `data/analysis` and both results CSVs, and it is safe to re-run.
 
