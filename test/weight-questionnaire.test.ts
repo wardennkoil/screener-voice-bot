@@ -28,6 +28,12 @@ const SARAH: Array<[string, unknown]> = [
   ["screening_visit", "Tuesday October 6 at 8:30 AM"],
 ];
 
+/** Ruled out: screening stops, and the other-studies question comes before they are told. */
+function expectRuledOut(state: ScreeningState, step: StepResult): void {
+  expect(step).toMatchObject({ ok: true, screening_complete: false, next_question: { id: "open_to_other_studies" }, remaining: 1 });
+  expect(state.eligibility().status).toBe("ineligible");
+}
+
 function record(state: ScreeningState, answers: Array<[string, unknown]>): StepResult {
   let last!: StepResult;
   for (const [id, value] of answers) {
@@ -44,25 +50,27 @@ describe("weight management questionnaire", () => {
     expect(last.screening_complete).toBe(true);
     expect(last.outcome).toBe("eligible");
     expect(s.bmi()).toBe(34.1);
+    // People who qualify are never asked about other studies.
+    expect(last.next_question).toBeNull();
+    expect(s.askedWhenIneligible()).toEqual([]);
   });
 
-  it("ends the screening the moment an answer rules them out", () => {
+  it("stops screening the moment an answer rules them out, and asks about other studies before closing", () => {
     const s = new ScreeningState(weightStudy());
     record(s, [["still_interested", true], ["height_inches", 68], ["weight_lbs", 240], ["weight_change_3mo", false], ["high_blood_pressure", false], ["diabetes", "no"]]);
-    const step = s.recordAnswer("weight_loss_meds_3mo", true);
-    expect(step).toMatchObject({ ok: true, screening_complete: true, outcome: "ineligible", next_question: null });
+    expectRuledOut(s, s.recordAnswer("weight_loss_meds_3mo", true));
+    expect(s.recordAnswer("open_to_other_studies", true)).toMatchObject({ ok: true, screening_complete: true, outcome: "ineligible", next_question: null, remaining: 0 });
   });
 
-  it("ends right away when they lose interest after hearing about the placebo", () => {
+  it("stops right away when they lose interest after hearing about the placebo", () => {
     const s = new ScreeningState(weightStudy());
-    expect(s.recordAnswer("still_interested", false)).toMatchObject({ screening_complete: true, outcome: "ineligible" });
+    expectRuledOut(s, s.recordAnswer("still_interested", false));
   });
 
   it("stops right after weight when the BMI is too low for any route in", () => {
     const s = new ScreeningState(weightStudy());
     record(s, [["still_interested", true], ["height_inches", 70]]);
-    const step = s.recordAnswer("weight_lbs", 150); // BMI 21.5
-    expect(step).toMatchObject({ screening_complete: true, outcome: "ineligible" });
+    expectRuledOut(s, s.recordAnswer("weight_lbs", 150)); // BMI 21.5
     expect(s.eligibility().failed).toEqual(["bmi"]);
   });
 
@@ -77,7 +85,7 @@ describe("weight management questionnaire", () => {
 
     const withoutBp = new ScreeningState(weightStudy());
     record(withoutBp, [["still_interested", true], ["height_inches", 66], ["weight_lbs", 170], ["weight_change_3mo", false]]);
-    expect(withoutBp.recordAnswer("high_blood_pressure", false)).toMatchObject({ screening_complete: true, outcome: "ineligible" });
+    expectRuledOut(withoutBp, withoutBp.recordAnswer("high_blood_pressure", false));
   });
 
   it("accepts prediabetes and rules out diabetes", () => {
@@ -87,7 +95,7 @@ describe("weight management questionnaire", () => {
     expect(pre.recordAnswer("diabetes", "prediabetes").screening_complete).toBe(false);
     const dia = new ScreeningState(weightStudy());
     record(dia, upTo);
-    expect(dia.recordAnswer("diabetes", "diabetes")).toMatchObject({ screening_complete: true, outcome: "ineligible" });
+    expectRuledOut(dia, dia.recordAnswer("diabetes", "diabetes"));
   });
 
   it("asks for their availability when none of the offered slots works", () => {
@@ -113,6 +121,7 @@ describe("weight management questionnaire", () => {
     expect(prompt).toContain("elecoglipron");
     expect(prompt).toContain("- The study medication and the study tests are at no cost.");
     expect(prompt).toContain("A tool result can end the screening early");
+    expect(prompt).toContain("open_to_other_studies (only when a tool result says they do not qualify: ask it before telling them anything about eligibility)");
     expect(prompt).toContain("You are calling Sarah.");
   });
 });
@@ -151,8 +160,8 @@ describe("recording after the screening completed", () => {
     const { state, tools } = started();
     for (const [id, value] of SARAH.slice(0, 7)) tools.handle("record_answer", { question_id: id, value });
     const stop = tools.handle("record_answer", { question_id: "weight_loss_meds_3mo", value: true });
-    expect(stop.payload).toMatchObject({ screening_complete: true, outcome: "ineligible" });
-    expect(state.stage).toBe("closing");
+    expect(stop.payload).toMatchObject({ ok: true, next_question: { id: "open_to_other_studies" } });
+    expect(state.stage).toBe("screening");
 
     const fixed = tools.handle("record_answer", { question_id: "weight_loss_meds_3mo", value: false, verbatim: "Actually I stopped five months ago" });
     expect(fixed.payload).toMatchObject({ ok: true, next_question: { id: "weight_loss_surgery" } });
@@ -160,6 +169,28 @@ describe("recording after the screening completed", () => {
 
     tools.handle("end_call", { reason: "completed" });
     expect(tools.handle("record_answer", { question_id: "weight_loss_surgery", value: false }).isError).toBe(true);
+  });
+
+  it("asks about other studies before telling them, and closes in line with the answer", () => {
+    for (const [open, said, promise] of [
+      [true, ": yes", "the team will be in touch when a suitable one opens"],
+      [false, ": no", "promise no further contact"],
+    ] as const) {
+      const { tools } = started();
+      for (const [id, value] of SARAH.slice(0, 7)) tools.handle("record_answer", { question_id: id, value });
+      const stop = tools.handle("record_answer", { question_id: "weight_loss_meds_3mo", value: true });
+      expect(stop.payload.screening_complete).toBeUndefined();
+      expect(stop.payload.closing_guidance).toBeUndefined();
+      expect(String(stop.payload.note)).toContain("They do not qualify for this study. Do not tell them that yet");
+
+      const asked = tools.handle("record_answer", { question_id: "open_to_other_studies", value: open });
+      expect(asked.payload).toMatchObject({ ok: true, screening_complete: true, outcome: "ineligible" });
+      const closing = String(asked.payload.closing_guidance);
+      expect(closing).toContain("say this study is not the right fit right now");
+      expect(closing).toContain(`contact them about other research studies that might suit them. Record true if yes"${said}`);
+      expect(closing).toContain(promise);
+      expect(closing).not.toContain("the team may reach out if a suitable study opens");
+    }
   });
 
   it("holds consent back until the consent statement has been given", () => {

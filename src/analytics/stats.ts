@@ -1,5 +1,6 @@
 import { flattenQuestions, type Questionnaire } from "../screening/schema.js";
 import type { Transcript } from "../storage/transcripts.js";
+import { isAskedWhenIneligible } from "../screening/state.js";
 
 /** A transcript turn split into what was said and any bracketed phone-system note glued in front of it. */
 export interface DisplayTurn {
@@ -27,6 +28,8 @@ export interface QuestionCoverage {
   verbatim?: string;
   skipReason?: string;
   followUp: boolean;
+  /** Asked only once the person was ruled out (ask_when: ineligible). */
+  whenIneligible: boolean;
   sensitive: boolean;
 }
 
@@ -112,7 +115,7 @@ export function computeStats(t: Transcript, q: Questionnaire): CallStats {
 
   const flat = flattenQuestions(q);
   const coverage = new Map<string, QuestionCoverage>(
-    flat.map((x, i) => [x.id, { id: x.id, plannedPosition: i + 1, status: "not_reached", outOfOrder: false, followUp: Boolean(x.parentId), sensitive: x.sensitive }]),
+    flat.map((x, i) => [x.id, { id: x.id, plannedPosition: i + 1, status: "not_reached", outOfOrder: false, followUp: Boolean(x.parentId), whenIneligible: isAskedWhenIneligible(x), sensitive: x.sensitive }]),
   );
   const toolErrors: CallStats["toolErrors"] = [];
   const flags: string[] = [];
@@ -177,7 +180,7 @@ export function computeStats(t: Transcript, q: Questionnaire): CallStats {
   for (let i = best; i >= 0; i = prev[i]!) inOrder.add(i);
   done.forEach((c, i) => (c.outOfOrder = !inOrder.has(i)));
   const outOfOrder = done.length - inOrder.size;
-  const requiredIds = new Set(flat.filter((x) => x.required && !x.parentId).map((x) => x.id));
+  const requiredIds = new Set(flat.filter((x) => x.required && !x.parentId && !isAskedWhenIneligible(x)).map((x) => x.id));
 
   return {
     durationS: Math.max(0, Math.round((Date.parse(end) - Date.parse(t.startedAt)) / 1000)),

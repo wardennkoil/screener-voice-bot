@@ -21,4 +21,19 @@ questions:
     expect(() => parseQuestionnaire(base + `  - {id: a, type: single_choice, ask: x}\n`)).toThrow(/needs options/);
     expect(() => parseQuestionnaire(base + `  - {id: Bad-Id, type: yes_no, ask: x}\n`)).toThrow(/snake_case/);
   });
+
+  it("keeps ask_when questions out of eligibility and follow-ups", () => {
+    const base = `
+study: {name: s, organization: o, description_short: d, callback_number_spoken: c, next_steps_if_eligible: n}
+caller: {persona_name: Sam}
+questions:
+  - {id: a, type: yes_no, ask: x, eligible_if: {equals: true}}
+`;
+    expect(parseQuestionnaire(base + `  - {id: b, type: yes_no, ask: y, ask_when: ineligible}\n`).questions[1]!.ask_when).toBe("ineligible");
+    expect(() => parseQuestionnaire(base + `  - {id: b, type: yes_no, ask: y, ask_when: ineligible, eligible_if: {equals: true}}\n`)).toThrow(/ask_when cannot have eligible_if/);
+    expect(() => parseQuestionnaire(base + `  - {id: b, type: yes_no, ask: y, ask_when: eligible}\n`)).toThrow();
+    expect(() =>
+      parseQuestionnaire(base + `  - {id: b, type: yes_no, ask: y, follow_up_if: {when: {equals: true}, question: {id: c, type: yes_no, ask: z, ask_when: ineligible}}}\n`),
+    ).toThrow(/follow-up "c" cannot use ask_when/);
+  });
 });

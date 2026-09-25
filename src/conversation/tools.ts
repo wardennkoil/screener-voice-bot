@@ -1,5 +1,5 @@
 import type { Questionnaire } from "../screening/schema.js";
-import type { ScreeningState, StepResult } from "../screening/state.js";
+import { isAskedWhenIneligible, type ScreeningState, type StepResult } from "../screening/state.js";
 import type { EligibilityStatus } from "../screening/eligibility.js";
 
 /** Tool declaration in the Gemini Interactions API shape. */
@@ -121,13 +121,28 @@ export interface HandleContext {
 const PREMATURE =
   "You asked a question in this same reply, and the answer you tried to record is not something the person has said yet. Only record answers to the question that was already asked before their latest reply. Say nothing more now; wait for their reply.";
 
-function closingGuidance(q: Questionnaire, status: EligibilityStatus, failed: string[]): string {
+/** What a ruled-out person already told us in the ask_when: ineligible questions, for the goodbye to stay consistent with. */
+function answersBeforeClosing(state: ScreeningState): string {
+  const asked = state.askedWhenIneligible();
+  if (!asked.length) return "";
+  const lines = asked.map(({ question, answer, skipped }) => {
+    const said = answer ? (answer.value === true ? "yes" : answer.value === false ? "no" : JSON.stringify(answer.value)) : skipped !== undefined ? "they did not answer" : "not asked yet";
+    return `"${question.ask.trim()}": ${said}`;
+  });
+  return ` Before this you asked: ${lines.join("; ")}. Keep your goodbye consistent with that: if they agreed to hear about other studies, say the team will be in touch when a suitable one opens; if they declined or did not answer, thank them and promise no further contact.`;
+}
+
+function closingGuidance(q: Questionnaire, status: EligibilityStatus, failed: string[], state: ScreeningState): string {
   switch (status) {
     case "eligible":
       return `They appear to qualify. Tell them warmly that ${q.study.next_steps_if_eligible}; whatever you already said in your last reply counts, so don't repeat it. Then ask if they have any questions, answer them from what you know about the study (the study team handles anything else), and when they have none, say goodbye and call end_call('completed') in that same reply.`;
     case "ineligible": {
       const why = q.settings.reveal_reason_when_ineligible && failed.length ? ` You may say it comes down to the question about ${failed.join(" and ").replace(/_/g, " ")}.` : " Do not say which answer ruled them out.";
-      return `They do not match the current criteria. Do not ask any more screening questions. Thank them sincerely, say this study is not the right fit right now, and that the team may reach out if a suitable study opens.${why} Then say goodbye and call end_call('completed').`;
+      const before = answersBeforeClosing(state);
+      if (!before) {
+        return `They do not match the current criteria. Do not ask any more screening questions. Thank them sincerely, say this study is not the right fit right now, and that the team may reach out if a suitable study opens.${why} Then say goodbye and call end_call('completed').`;
+      }
+      return `They do not match the current criteria. Do not ask any more screening questions. Thank them sincerely and say this study is not the right fit right now.${why}${before} Then say goodbye and call end_call('completed').`;
     }
     case "undetermined":
       return `Some answers are missing, so eligibility is undetermined. Thank them, say the study team will review and follow up, say goodbye, and call end_call('completed').`;
@@ -215,8 +230,14 @@ export class ToolHandlers {
       const elig = this.state.eligibility();
       out.screening_complete = true;
       out.outcome = elig.status;
-      out.closing_guidance = closingGuidance(this.q, elig.status, elig.failed);
+      out.closing_guidance = closingGuidance(this.q, elig.status, elig.failed, this.state);
       if (step.next_question) out.note = "One optional question remains; ask it before closing if the person is not in a hurry.";
+    }
+    const next = step.next_question ? this.state.findQuestion(step.next_question.id) : undefined;
+    if (next && isAskedWhenIneligible(next)) {
+      // Ruled out: the person hears this question first, and only then that this study is not a fit.
+      out.note =
+        "They do not qualify for this study. Do not tell them that yet, and ask no more screening questions: ask next_question now, in a natural way, as if wrapping up. Once it is recorded, the tool result gives closing_guidance for how to tell them.";
     }
     return out;
   }

@@ -495,7 +495,7 @@ function insights(d, a) {
       const con = concerns.get(c.id);
       const val = c.status === "answered" ? esc(JSON.stringify(c.value)) : c.status === "skipped" ? '<span class="muted">skipped' + (c.skipReason ? ": " + esc(c.skipReason) : "") + "</span>" : '<span class="muted">not reached</span>';
       const order = c.actualPosition == null ? "–" : c.actualPosition + (c.outOfOrder ? " ↺" : "");
-      return "<tr><td class=num>" + c.plannedPosition + "</td><td class=num" + (c.outOfOrder ? ' title="Asked ahead of a question planned before it"' : "") + ">" + order + "</td><td>" + esc(label(c.id)) + (c.followUp ? ' <span class="muted small">follow-up</span>' : "") +
+      return "<tr><td class=num>" + c.plannedPosition + "</td><td class=num" + (c.outOfOrder ? ' title="Asked ahead of a question planned before it"' : "") + ">" + order + "</td><td>" + esc(label(c.id)) + (c.followUp ? ' <span class="muted small">follow-up</span>' : "") + (c.whenIneligible ? ' <span class="muted small">if not eligible</span>' : "") +
         (c.verbatim ? '<div class="small muted">“' + esc(c.verbatim) + "”</div>" : "") + "</td><td>" + val +
         (con ? '<div style="margin-top:4px">' + chip(con.confidence === "low" ? "critical" : con.confidence === "medium" ? "warning" : "good", con.confidence + " confidence") + '</div><div class="small">' + esc(con.concern) + "</div>" : "") + "</td></tr>";
     }).join("") + "</tbody></table></div></div>");

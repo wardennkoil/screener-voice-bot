@@ -139,4 +139,10 @@ questions:
         type: free_text
         ask: "When they are generally available for a morning visit of up to four hours, so the study team can call to book it"
 
+  # Asked only after an answer rules the person out, and before Maria tells them.
+  - id: open_to_other_studies
+    type: yes_no
+    ask_when: ineligible
+    ask: "Before telling them anything about eligibility for this study, and as a neutral wrap-up question that does not hint at it (no 'better fit'), whether they would like LMC to contact them about other research studies that might suit them. Record true if yes"
+
 eligibility: all_rules

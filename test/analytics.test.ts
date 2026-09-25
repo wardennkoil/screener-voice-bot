@@ -155,3 +155,22 @@ describe("overview", () => {
     expect(o.attention[0]!.reasons).toEqual(expect.arrayContaining(["1 tool error", "flagged for a human", "1 high-severity deviation", "1 doubtful answer"]));
   });
 });
+
+describe("questions asked only when someone is ruled out", () => {
+  const qx = sampleQuestionnaire();
+  qx.questions.push({ id: "open_to_other_studies", type: "yes_no", ask: "Whether they want to hear about other studies", ask_when: "ineligible", required: true, sensitive: false });
+  const answer = (question_id: string, value: unknown) => ({ at: "2026-09-16T15:32:00.000Z", name: "record_answer", args: { question_id, value }, result: { ok: true } });
+
+  it("do not count as required and only show in the funnel when actually asked", () => {
+    const ruledOut = { ...sampleTranscript("X"), toolCalls: [answer("age", 80), answer("open_to_other_studies", true)] };
+    const s = computeStats(ruledOut, qx);
+    expect(s.required).toBe(computeStats(sampleTranscript(), q).required);
+    expect(s.requiredAnswered).toBe(1);
+    expect(s.coverage.find((c) => c.id === "open_to_other_studies")).toMatchObject({ whenIneligible: true, status: "answered", outOfOrder: false });
+
+    const qualified = { ...sampleTranscript("Y"), toolCalls: [answer("age", 40), answer("diagnosed_insomnia", true)] };
+    const funnel = Object.fromEntries(buildOverview([bundle("X", ruledOut, qx), bundle("Y", qualified, qx)], qx).funnel.map((f) => [f.id, f.reached]));
+    // Asking it at the end of the ruled-out call does not make that call look like it got through every question.
+    expect(funnel).toMatchObject({ age: 2, diagnosed_insomnia: 1, sleep_medication: 0, open_to_other_studies: 1 });
+  });
+});

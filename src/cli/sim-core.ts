@@ -16,7 +16,12 @@ export const PERSONAS: Record<string, { profile: string; expect: Partial<Pick<Ca
   },
   ineligible: {
     profile:
-      "You are Jordan, 45, and you filled out the weight study form. Five foot eight, 240 pounds, weight steady. No high blood pressure, no diabetes. Your doctor started you on Ozempic last month. Everything else is a no. Polite and a little chatty.",
+      "You are Jordan, 45, and you filled out the weight study form. Five foot eight, 240 pounds, weight steady. No high blood pressure, no diabetes. Your doctor started you on Ozempic last month. Everything else is a no. If asked about other studies, you'd be glad to hear about them. Polite and a little chatty.",
+    expect: { outcome: "completed", eligible: "no" },
+  },
+  ineligible_no_other: {
+    profile:
+      "You are Jordan, 45, and you filled out the weight study form. Five foot eight, 240 pounds, weight steady. No high blood pressure, no diabetes. You had weight-loss surgery two years ago. If asked about other studies, you say no thanks, this was a one-off. Polite and brief.",
     expect: { outcome: "completed", eligible: "no" },
   },
   bmi_borderline: {

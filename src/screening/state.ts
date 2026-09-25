@@ -54,9 +54,23 @@ export class ScreeningState {
     return new Map([...this.answers].map(([id, a]) => [id, a.value]));
   }
 
+  /** Follow-ups whose parent answer matches, and ask_when: ineligible questions once the person is ruled out. */
   applicableQuestions(): FlatQuestion[] {
     const values = this.answerValues();
-    return this.questions.filter((q) => isApplicable(q, values));
+    const ruledOut = this.eligibility().status === "ineligible";
+    return this.questions.filter((q) => isApplicable(q, values) && (!isAskedWhenIneligible(q) || ruledOut));
+  }
+
+  /** Ruled out with stop_on_disqualify on: only the ask_when: ineligible questions are left to ask. */
+  private stoppedEarly(): boolean {
+    return this.questionnaire.settings.stop_on_disqualify && this.eligibility().status === "ineligible";
+  }
+
+  /** What is still to ask, in order: regular questions first, then the ones for a ruled-out person. */
+  private pendingQuestions(): FlatQuestion[] {
+    const pending = this.applicableQuestions().filter((q) => !this.answers.has(q.id) && !this.skipped.has(q.id));
+    const whenIneligible = pending.filter(isAskedWhenIneligible);
+    return this.stoppedEarly() ? whenIneligible : [...pending.filter((q) => !isAskedWhenIneligible(q)), ...whenIneligible];
   }
 
   eligibility(): EligibilityResult {
@@ -68,23 +82,27 @@ export class ScreeningState {
     return computeBmi(this.questionnaire, this.answerValues());
   }
 
-  /** True once every applicable required question is answered or explicitly skipped. */
+  /** True once every applicable required question is answered or explicitly skipped (after stop_on_disqualify, only the ones left to ask). */
   isScreeningComplete(): boolean {
-    if (this.questionnaire.settings.stop_on_disqualify && this.eligibility().status === "ineligible") return true;
-    return this.applicableQuestions().every((q) => !q.required || this.answers.has(q.id) || this.skipped.has(q.id));
+    return this.pendingQuestions().every((q) => !q.required);
   }
 
   remaining(): number {
-    return this.applicableQuestions().filter((q) => !this.answers.has(q.id) && !this.skipped.has(q.id)).length;
+    return this.pendingQuestions().length;
   }
 
   nextQuestion(): NextQuestion | null {
-    if (this.questionnaire.settings.stop_on_disqualify && this.eligibility().status === "ineligible") return null;
+    const q = this.pendingQuestions()[0];
+    if (!q) return null;
     const applicable = this.applicableQuestions();
-    const idx = applicable.findIndex((q) => !this.answers.has(q.id) && !this.skipped.has(q.id));
-    if (idx === -1) return null;
-    const q = applicable[idx]!;
-    return { id: q.id, guidance: guidanceFor(q), position: idx + 1, total: applicable.length };
+    return { id: q.id, guidance: guidanceFor(q), position: applicable.indexOf(q) + 1, total: applicable.length };
+  }
+
+  /** The ask_when: ineligible questions that apply now, with what was recorded for each. */
+  askedWhenIneligible(): Array<{ question: FlatQuestion; answer?: RecordedAnswer; skipped?: string }> {
+    return this.applicableQuestions()
+      .filter(isAskedWhenIneligible)
+      .map((question) => ({ question, answer: this.answers.get(question.id), skipped: this.skipped.get(question.id) }));
   }
 
   findQuestion(id: string): FlatQuestion | undefined {
@@ -94,7 +112,7 @@ export class ScreeningState {
   recordAnswer(id: string, raw: unknown, verbatim?: string): StepResult {
     const q = this.findQuestion(id);
     if (!q) return this.result(false, `Unknown question id "${id}". Use one of: ${this.questions.map((x) => x.id).join(", ")}.`);
-    if (!isApplicable(q, this.answerValues())) {
+    if (!this.applicableQuestions().includes(q)) {
       return this.result(false, `"${id}" does not apply to this person; do not ask it.`);
     }
     const v = validateAnswer(q, raw);
@@ -119,6 +137,11 @@ export class ScreeningState {
     if (complete) res.outcome = this.eligibility().status;
     return res;
   }
+}
+
+/** Asked only after the person has been ruled out, before they are told (ask_when: ineligible). */
+export function isAskedWhenIneligible(q: Pick<FlatQuestion, "ask_when">): boolean {
+  return q.ask_when === "ineligible";
 }
 
 /** One or two sentences telling the model what to find out and what shape the answer must take. */

@@ -1,6 +1,6 @@
 import type { Questionnaire } from "../screening/schema.js";
 import { flattenQuestions } from "../screening/schema.js";
-import { guidanceFor } from "../screening/state.js";
+import { guidanceFor, isAskedWhenIneligible } from "../screening/state.js";
 
 function describeRule(rule: { equals?: unknown; in?: string[]; min?: number; max?: number; not_equals?: unknown } | undefined): string {
   if (!rule) return "answered";
@@ -24,7 +24,14 @@ export interface PromptContext {
 export function buildSystemPrompt(q: Questionnaire, ctx: PromptContext): string {
   const persona = q.caller.persona_name;
   const questions = flattenQuestions(q)
-    .map((x, i) => `${i + 1}. ${x.id}${x.parentId ? ` (follow-up: ask only if ${x.parentId} was ${describeRule(x.parentRule)}; otherwise skip to the next one)` : ""}: ${guidanceFor(x)}`)
+    .map((x, i) => {
+      const when = x.parentId
+        ? ` (follow-up: ask only if ${x.parentId} was ${describeRule(x.parentRule)}; otherwise skip to the next one)`
+        : isAskedWhenIneligible(x)
+          ? " (only when a tool result says they do not qualify: ask it before telling them anything about eligibility)"
+          : "";
+      return `${i + 1}. ${x.id}${when}: ${guidanceFor(x)}`;
+    })
     .join("\n");
 
   const identity = q.caller.ai_disclosure
@@ -55,7 +62,9 @@ export function buildSystemPrompt(q: Questionnaire, ctx: PromptContext): string 
         ]
       : []),
     "Screening. Ask the questions in the order the tools give you, one question per turn. After each answer, call record_answer immediately, then acknowledge briefly and move to the next question the tool result names. If they already told you an answer earlier in the call, confirm it briefly instead of asking from scratch. Never read the list, never ask two things at once, never announce how many questions are left unless asked." +
-      (q.settings.stop_on_disqualify ? " A tool result can end the screening early (screening_complete with outcome ineligible): then ask nothing more and follow its closing_guidance." : ""),
+      (q.settings.stop_on_disqualify
+        ? " A tool result can end the screening early when an answer rules them out: then ask no more screening questions. If it names a next_question, ask only that, before saying anything about eligibility; then follow its closing_guidance."
+        : ""),
     "Closing. When a tool result says screening_complete, follow its closing_guidance; it tells you what to say before goodbye (for someone who qualifies, that includes answering their questions). Say your goodbye in the same reply as the end_call call.",
   ];
   const flow = steps.map((x, i) => `${i + 1}. ${x}`).join("\n");

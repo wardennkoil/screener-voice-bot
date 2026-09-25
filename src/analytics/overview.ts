@@ -2,6 +2,7 @@ import { flattenQuestions, type Questionnaire } from "../screening/schema.js";
 import type { Transcript } from "../storage/transcripts.js";
 import { isAnalysisCurrent, type StoredAnalysis } from "./analyze.js";
 import { computeStats, displayTurns, type CallStats } from "./stats.js";
+import { isAskedWhenIneligible } from "../screening/state.js";
 
 export interface CallSummary {
   sid: string;
@@ -123,22 +124,23 @@ export function buildOverview(bundles: CallBundle[], q: Questionnaire): Overview
     if (s.latency.p50Ms !== undefined) latencies.push(s.latency.p50Ms);
 
     // A question counts as reached when it was answered/skipped or was the next one the call was on.
+    // Questions asked only after someone is ruled out sit at the end of the plan but say nothing about how far the call got.
+    const coverage = new Map(s.coverage.map((c) => [c.id, c]));
+    const touched = (id: string) => coverage.get(id)?.status !== "not_reached" || s.lastQuestionReached === id;
     let furthest = -1;
     for (const c of s.coverage) {
       const i = plannedIndex.get(c.id)!;
-      if (c.status !== "not_reached") {
-        furthest = Math.max(furthest, i);
-        if (c.status === "answered") funnel[i]!.answered++;
-      }
+      if (c.status === "answered") funnel[i]!.answered++;
+      if (c.status !== "not_reached" && !c.whenIneligible) furthest = Math.max(furthest, i);
     }
-    if (s.lastQuestionReached !== undefined) furthest = Math.max(furthest, plannedIndex.get(s.lastQuestionReached) ?? -1);
-    const coverage = new Map(s.coverage.map((c) => [c.id, c]));
-    for (let i = 0; i <= furthest; i++) {
-      // A conditional follow-up the call passed without touching simply did not apply; it is not a drop-off.
-      const id = planned[i]!.id;
-      if (planned[i]!.parentId && coverage.get(id)?.status === "not_reached" && s.lastQuestionReached !== id) continue;
-      funnel[i]!.reached++;
-    }
+    const last = s.lastQuestionReached === undefined ? undefined : planned[plannedIndex.get(s.lastQuestionReached) ?? -1];
+    if (last && !isAskedWhenIneligible(last)) furthest = Math.max(furthest, plannedIndex.get(last.id)!);
+    planned.forEach((q, i) => {
+      // A conditional follow-up or an ineligible-only question counts only when the call actually got to it.
+      if (q.parentId || isAskedWhenIneligible(q)) {
+        if (touched(q.id)) funnel[i]!.reached++;
+      } else if (i <= furthest) funnel[i]!.reached++;
+    });
 
     const reasons: string[] = [];
     if (s.toolErrors.length) reasons.push(`${s.toolErrors.length} tool error${s.toolErrors.length > 1 ? "s" : ""}`);
@@ -181,7 +183,7 @@ export function buildOverview(bundles: CallBundle[], q: Questionnaire): Overview
     avgDurationS: Math.round(mean(bundles.map((b) => b.stats.durationS)) ?? 0),
     medianLatencyMs: sortedLat.length ? sortedLat[Math.floor(sortedLat.length / 2)] : undefined,
     avgAnswered: mean(bundles.map((b) => b.stats.requiredAnswered)) ?? 0,
-    required: bundles[0]?.stats.required ?? planned.filter((x) => x.required && !x.parentId).length,
+    required: bundles[0]?.stats.required ?? planned.filter((x) => x.required && !x.parentId && !isAskedWhenIneligible(x)).length,
     avgSentiment: mean(sentiments),
     sentimentLabels,
     avgAdherence: adherence.length ? Math.round(mean(adherence)!) : undefined,

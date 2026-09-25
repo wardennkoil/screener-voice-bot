@@ -57,6 +57,11 @@ const BaseQuestionSchema = z.strictObject({
   eligible_if: RuleSchema.optional(),
   /** Marks a delicate topic; the model is told to ask gently and accept a decline. */
   sensitive: z.boolean().default(false),
+  /**
+   * "ineligible": asked only once an answer has ruled the person out, before the caller tells
+   * them (for example, whether they would like to hear about other studies). Never asked otherwise.
+   */
+  ask_when: z.literal("ineligible").optional(),
 });
 
 const FollowUpSchema = z.strictObject({
@@ -75,12 +80,16 @@ export const QuestionSchema = BaseQuestionSchema.extend({
   if (!needsOptions && q.options) {
     ctx.addIssue({ code: "custom", message: `question "${q.id}" of type ${q.type} must not have options` });
   }
+  if (q.ask_when && (q.eligible_if || q.follow_up_if)) {
+    ctx.addIssue({ code: "custom", message: `question "${q.id}" with ask_when cannot have eligible_if or follow_up_if (it is asked after eligibility is decided)` });
+  }
   const fu = q.follow_up_if?.question;
   if (fu) {
     const fuNeedsOptions = fu.type === "single_choice" || fu.type === "multi_choice";
     if (fuNeedsOptions && !fu.options) {
       ctx.addIssue({ code: "custom", message: `follow-up "${fu.id}" of type ${fu.type} needs options` });
     }
+    if (fu.ask_when) ctx.addIssue({ code: "custom", message: `follow-up "${fu.id}" cannot use ask_when; put it on a top-level question` });
   }
 });
 export type Question = z.infer<typeof QuestionSchema>;
